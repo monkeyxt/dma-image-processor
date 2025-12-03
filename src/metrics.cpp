@@ -152,7 +152,7 @@ void PipelineMetrics::print(std::FILE* out) const {
     "DMA:    produced=%llu  archived_offered=%llu  pool_exhaust=%llu\n"
     "PROC:   frames=%llu  stale_desc=%llu  empty_polls=%llu\n"
     "ARCH:   frames=%llu  bytes=%llu  rotations=%llu  stale_desc=%llu  io_errors=%llu\n"
-    "\n=== End-to-end throughput ===\n"
+    "\n=== End-to-end Throughput ===\n"
     "Elapsed: %.3f s\n"
     "DMA:     %.1f fps\n"
     "PROC:    %.1f fps\n"

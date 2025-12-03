@@ -27,7 +27,7 @@
 #include "dma_source.hpp"
 #include "processor.hpp"
 #include "archiver.hpp"
-#include "poisson_detector.hpp"
+#include "poisson.hpp"
 #include "metrics.hpp"
 
 #define EXPECT_TRUE(x) do{ \
@@ -54,7 +54,6 @@ using pipeline::DmaSource;
 using pipeline::DmaConfig;
 using pipeline::Processor;
 using pipeline::ProcessorConfig;
-using pipeline::ROI;
 using pipeline::Archiver;
 using pipeline::ArchiverConfig;
 using pipeline::PipelineMetrics;
@@ -78,16 +77,16 @@ constexpr bool     DRAIN_QUEUES   = false;   // drain queues after processing
 // ============================================================================
 // ROI grid configuration
 // ============================================================================
-constexpr uint32_t  ROW_START     = 50;     // start row of ROI grid
-constexpr uint32_t  COL_START     = 50;     // start column of ROI grid
-constexpr uint32_t  ROW_END       = 250;    // end row of ROI grid
-constexpr uint32_t  COL_END       = 250;    // end column of ROI grid
-constexpr uint32_t  ROI_W         = 10;     // ROI width
-constexpr uint32_t  ROI_H         = 10;     // ROI height
-constexpr double    LAMBDA_OCC    = 10.0;   // Poisson distribution for occupied ROI
-constexpr double    LAMBDA_EMPTY  = 0.5;    // Poisson distribution for empty ROI
-constexpr double    FP_TARGET     = 1e-3;   // False positive rate
-constexpr int       MAX_K         = 100;    // Maximum scan range
+constexpr std::size_t  ROW_START     = 50;     // start row of ROI grid
+constexpr std::size_t  COL_START     = 50;     // start column of ROI grid
+constexpr std::size_t  ROW_END       = 250;    // end row of ROI grid
+constexpr std::size_t  COL_END       = 250;    // end column of ROI grid
+constexpr std::size_t  ROI_W         = 10;     // ROI width
+constexpr std::size_t  ROI_H         = 10;     // ROI height
+constexpr double       LAMBDA_OCC    = 10.0;   // Poisson distribution for occupied ROI
+constexpr double       LAMBDA_EMPTY  = 0.5;    // Poisson distribution for empty ROI
+constexpr double       FP_TARGET     = 1e-3;   // False positive rate
+constexpr int          MAX_K         = 100;    // Maximum scan range
 
 // ============================================================================
 // SPSC queue configuration
@@ -200,50 +199,10 @@ load_npy_frames(const std::string& dir) {
     storage.emplace_back(std::move(buf));
   }
 
-  std::printf("DRIVER: Loaded %zu frames from %s\n", storage.size(), dir.c_str());
+  std::printf("MAIN: Loaded %zu frames from %s\n", storage.size(), dir.c_str());
   return storage;
 }
 
-// ============================================================================
-// Build a grid of ROIs and assign Poisson thresholds
-// The template parameters are the start and end coordinates of the ROI grid.
-// ============================================================================
-template<uint32_t ROW_START, uint32_t COL_START, 
-         uint32_t ROW_END, uint32_t COL_END>
-static std::vector<ROI> build_rois_with_poisson() {
-
-  std::vector<ROI> rois;
-  for (int y = ROW_START; y + ROI_H <= ROW_END; y += ROI_H) {
-    for (int x = COL_START; x + ROI_W <= COL_END; x += ROI_W) {
-      //printf("ROI: x=%d y=%d w=%d h=%d\n", x, y, ROI_W, ROI_H);
-      ROI r{x, y, ROI_W, ROI_H, 0};
-      rois.emplace_back(r);
-    }
-  }
-  printf("ROI: Built %zu ROIs\n", rois.size());
-
-  constexpr double lambda_occ   = LAMBDA_OCC;
-  constexpr double lambda_empty = LAMBDA_EMPTY;
-  constexpr double fp_target    = FP_TARGET;
-  constexpr int    max_k        = MAX_K;
-
-  pipeline::PoissonDetector det(lambda_occ, lambda_empty, fp_target, max_k);
-  const int T = det.threshold();
-
-  std::printf("ROI: PoissonDetector threshold T = %d "
-              "(FP=%.3e, FN=%.3e)\n",
-              T,
-              det.false_positive_rate(),
-              det.false_negative_rate());
-
-  for (auto& r : rois) {
-    r.threshold = static_cast<std::uint32_t>(T);
-  }
-
-  std::printf("ROI: Configured %zu ROIs of size %dx%d\n",
-              rois.size(), ROI_W, ROI_H);
-  return rois;
-}
 
 // ============================================================================
 // Main
@@ -361,8 +320,11 @@ int main(int argc, char** argv) {
     // Processor setup (ROIs + AVX worker pool)
     // ========================================================================
     
-    auto rois = build_rois_with_poisson<ROW_START, COL_START, 
-                                        ROW_END, COL_END>();
+    auto rois = pipeline::build_rois_with_poisson(
+        ROW_START, COL_START, ROW_END, COL_END,
+        ROI_W, ROI_H,
+        LAMBDA_OCC, LAMBDA_EMPTY,
+        FP_TARGET, MAX_K);
 
     pipeline::PopFn proc_pop = [&](Desc& d) -> bool {
       return proc_q.pop(d);
@@ -383,20 +345,20 @@ int main(int argc, char** argv) {
     pcfg.worker_threads = WORKER_THREADS;
     pcfg.print_stdout   = PRINT_STDOUT;
     pcfg.interval_print = INTERVAL_PRINT;
-    pcfg.output_file_path = result_path.string();  // Processor will create dir and file
+    pcfg.output_path    = result_path.string();  // Processor will create dir and file
 
     Processor proc(pool, pcfg, proc_pop, rois, on_result);
 
     // ========================================================================
     // Run pipeline
     // ========================================================================
-    std::puts("DRIVER: Starting pipeline...");
+    std::puts("MAIN: Starting pipeline...");
     if (PACE_FRAMES) {
-      std::puts("DRIVER: Pacing frames is enabled");
-      std::printf("DRIVER: Pacing frames to %d FPS\n", FPS);
+      std::puts("MAIN: Pacing frames is enabled");
+      std::printf("MAIN: Pacing frames to %d FPS\n", FPS);
     } else {
-      std::puts("DRIVER: Pacing frames is disabled");
-      std::puts("DRIVER: Frames will be delivered as fast as possible");
+      std::puts("MAIN: Pacing frames is disabled");
+      std::puts("MAIN: Frames will be delivered as fast as possible");
     }
 
     auto t0 = std::chrono::steady_clock::now();
@@ -408,7 +370,7 @@ int main(int argc, char** argv) {
       // Original behavior: fixed time run
       std::this_thread::sleep_for(std::chrono::duration<double>(run_seconds));
     } else {
-      printf("DRIVER: Waiting for DMA and PROC to finish...\n");
+      printf("MAIN: Waiting for DMA and PROC to finish...\n");
       while (true) {
         auto dma_done = dma.stats().produced.load();
         auto proc_done = proc.stats().frames.load();
@@ -417,14 +379,14 @@ int main(int argc, char** argv) {
       }
     }
 
-    std::puts("DRIVER: Stopping pipeline...");
+    std::puts("MAIN: Stopping pipeline...");
     dma.stop();
     
     // If DRAIN_QUEUES is true, wait for queues to drain so all frames are 
     // processed. Otherwise, the pipeline will stop when the DMA is terminated.
     /// This might cause some frames to be dropped by the PROC or ARCH.
     if (DRAIN_QUEUES) {
-      printf("DRIVER: Waiting for queues to drain...\n");
+      printf("MAIN: Waiting for queues to drain...\n");
       while (!proc_q.empty() || !arch_q.empty()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
@@ -456,7 +418,7 @@ int main(int argc, char** argv) {
     metrics.mark_arch_stale_desc(as.stale_desc.load());
     metrics.mark_arch_io_error(as.io_errors.load());
 
-    // Print unified metrics
+    /// Print unified metrics
     std::printf("\n");
     metrics.print(stdout);
 
@@ -471,10 +433,10 @@ int main(int argc, char** argv) {
     EXPECT_TRUE(pool.acquire() == UINT32_MAX);
     for (auto id : ids) pool.release(id);
 
-    std::puts("\nDRIVER: Pipeline run completed OK.");
+    std::puts("\nMAIN: Pipeline run completed OK.");
     return 0;
   } catch (const std::exception& ex) {
-    std::fprintf(stderr, "DRIVER: FATAL: %s\n", ex.what());
+    std::fprintf(stderr, "MAIN: FATAL: %s\n", ex.what());
     return 1;
   }
 }

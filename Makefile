@@ -75,17 +75,6 @@ CMAKE_BINARY_DIR = /home/txia23/quantum/dma-image-processor
 #=============================================================================
 # Targets provided globally by CMake.
 
-# Special rule for the target rebuild_cache
-rebuild_cache:
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Running CMake to regenerate build system..."
-	/home/txia23/anaconda3/bin/cmake --regenerate-during-build -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR)
-.PHONY : rebuild_cache
-
-# Special rule for the target rebuild_cache
-rebuild_cache/fast: rebuild_cache
-
-.PHONY : rebuild_cache/fast
-
 # Special rule for the target edit_cache
 edit_cache:
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Running CMake cache editor..."
@@ -107,6 +96,17 @@ test:
 test/fast: test
 
 .PHONY : test/fast
+
+# Special rule for the target rebuild_cache
+rebuild_cache:
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Running CMake to regenerate build system..."
+	/home/txia23/anaconda3/bin/cmake --regenerate-during-build -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR)
+.PHONY : rebuild_cache
+
+# Special rule for the target rebuild_cache
+rebuild_cache/fast: rebuild_cache
+
+.PHONY : rebuild_cache/fast
 
 # The main all target
 all: cmake_check_build_system
@@ -180,6 +180,19 @@ test_processor/fast:
 .PHONY : test_processor/fast
 
 #=============================================================================
+# Target rules for targets named test_poisson
+
+# Build rule for target.
+test_poisson: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_poisson
+.PHONY : test_poisson
+
+# fast build rule for target.
+test_poisson/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_poisson.dir/build.make CMakeFiles/test_poisson.dir/build
+.PHONY : test_poisson/fast
+
+#=============================================================================
 # Target rules for targets named test_dma_source
 
 # Build rule for target.
@@ -204,19 +217,6 @@ test_archiver: cmake_check_build_system
 test_archiver/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_archiver.dir/build.make CMakeFiles/test_archiver.dir/build
 .PHONY : test_archiver/fast
-
-#=============================================================================
-# Target rules for targets named test_poisson_detector
-
-# Build rule for target.
-test_poisson_detector: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_poisson_detector
-.PHONY : test_poisson_detector
-
-# fast build rule for target.
-test_poisson_detector/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_poisson_detector.dir/build.make CMakeFiles/test_poisson_detector.dir/build
-.PHONY : test_poisson_detector/fast
 
 #=============================================================================
 # Target rules for targets named dma-image-processor
@@ -465,32 +465,32 @@ tests/test_dma_source.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_dma_source.dir/build.make CMakeFiles/test_dma_source.dir/tests/test_dma_source.cpp.s
 .PHONY : tests/test_dma_source.cpp.s
 
-tests/test_poisson_detector.o: tests/test_poisson_detector.cpp.o
+tests/test_poisson.o: tests/test_poisson.cpp.o
 
-.PHONY : tests/test_poisson_detector.o
+.PHONY : tests/test_poisson.o
 
 # target to build an object file
-tests/test_poisson_detector.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_poisson_detector.dir/build.make CMakeFiles/test_poisson_detector.dir/tests/test_poisson_detector.cpp.o
-.PHONY : tests/test_poisson_detector.cpp.o
+tests/test_poisson.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_poisson.dir/build.make CMakeFiles/test_poisson.dir/tests/test_poisson.cpp.o
+.PHONY : tests/test_poisson.cpp.o
 
-tests/test_poisson_detector.i: tests/test_poisson_detector.cpp.i
+tests/test_poisson.i: tests/test_poisson.cpp.i
 
-.PHONY : tests/test_poisson_detector.i
+.PHONY : tests/test_poisson.i
 
 # target to preprocess a source file
-tests/test_poisson_detector.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_poisson_detector.dir/build.make CMakeFiles/test_poisson_detector.dir/tests/test_poisson_detector.cpp.i
-.PHONY : tests/test_poisson_detector.cpp.i
+tests/test_poisson.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_poisson.dir/build.make CMakeFiles/test_poisson.dir/tests/test_poisson.cpp.i
+.PHONY : tests/test_poisson.cpp.i
 
-tests/test_poisson_detector.s: tests/test_poisson_detector.cpp.s
+tests/test_poisson.s: tests/test_poisson.cpp.s
 
-.PHONY : tests/test_poisson_detector.s
+.PHONY : tests/test_poisson.s
 
 # target to generate assembly for a file
-tests/test_poisson_detector.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_poisson_detector.dir/build.make CMakeFiles/test_poisson_detector.dir/tests/test_poisson_detector.cpp.s
-.PHONY : tests/test_poisson_detector.cpp.s
+tests/test_poisson.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_poisson.dir/build.make CMakeFiles/test_poisson.dir/tests/test_poisson.cpp.s
+.PHONY : tests/test_poisson.cpp.s
 
 tests/test_processor.o: tests/test_processor.cpp.o
 
@@ -585,7 +585,7 @@ help:
 	@echo "... dma-image-processor"
 	@echo "... test_archiver"
 	@echo "... test_dma_source"
-	@echo "... test_poisson_detector"
+	@echo "... test_poisson"
 	@echo "... test_processor"
 	@echo "... test_slab_pool"
 	@echo "... test_spsc_ring"
@@ -613,9 +613,9 @@ help:
 	@echo "... tests/test_dma_source.o"
 	@echo "... tests/test_dma_source.i"
 	@echo "... tests/test_dma_source.s"
-	@echo "... tests/test_poisson_detector.o"
-	@echo "... tests/test_poisson_detector.i"
-	@echo "... tests/test_poisson_detector.s"
+	@echo "... tests/test_poisson.o"
+	@echo "... tests/test_poisson.i"
+	@echo "... tests/test_poisson.s"
 	@echo "... tests/test_processor.o"
 	@echo "... tests/test_processor.i"
 	@echo "... tests/test_processor.s"

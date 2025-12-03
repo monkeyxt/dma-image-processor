@@ -91,6 +91,8 @@ if(TEST_SOURCES)
             list(APPEND TEST_SOURCES_LIST src/archiver.cpp src/cnpy.cpp)
         elseif(TEST_NAME STREQUAL "test_processor")
             list(APPEND TEST_SOURCES_LIST src/processor.cpp src/cnpy.cpp)
+        elseif(TEST_NAME STREQUAL "test_poisson")
+            # poisson.hpp is header-only, no source file needed
         endif()
         add_executable(${TEST_NAME} ${TEST_SOURCES_LIST})
         

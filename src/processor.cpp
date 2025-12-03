@@ -329,9 +329,9 @@ void Processor::start() {
   }
   
   // Create output directory and file if configured
-  if (!impl_->cfg.output_file_path.empty()) {
+  if (!impl_->cfg.output_path.empty()) {
     namespace fs = std::filesystem;
-    fs::path file_path(impl_->cfg.output_file_path);
+    fs::path file_path(impl_->cfg.output_path);
     fs::path dir_path = file_path.parent_path();
     
     if (!dir_path.empty()) {
@@ -345,17 +345,17 @@ void Processor::start() {
       }
     }
     
-    impl_->output_file = std::fopen(impl_->cfg.output_file_path.c_str(), "w");
+    impl_->output_file = std::fopen(impl_->cfg.output_path.c_str(), "w");
     if (!impl_->output_file) {
       throw std::runtime_error(
-        "PROC: failed to open output file: " + impl_->cfg.output_file_path);
+        "PROC: failed to open output file: " + impl_->cfg.output_path);
     }
   }
   
   // Announce Processor configuration when starting
   std::printf("PROC: Running with config:\n");
-  std::printf("  image_w=%u\n", impl_->cfg.image_w);
-  std::printf("  image_h=%u\n", impl_->cfg.image_h);
+  std::printf("  image_w=%zu\n", impl_->cfg.image_w);
+  std::printf("  image_h=%zu\n", impl_->cfg.image_h);
   std::printf("  worker_threads=%u\n", n);
   std::printf("  cpu_affinity=%d\n", impl_->cfg.cpu_affinity);
   std::printf("  print_stdout=%s\n", impl_->cfg.print_stdout ? "true" : "false");
@@ -370,8 +370,8 @@ void Processor::start() {
 #else
   std::printf("  AVX=disabled (using scalar fallback)\n");
 #endif
-  if (!impl_->cfg.output_file_path.empty()) {
-    std::printf("  output_file=%s\n", impl_->cfg.output_file_path.c_str());
+  if (!impl_->cfg.output_path.empty()) {
+    std::printf("  output_path=%s\n", impl_->cfg.output_path.c_str());
   }
   
   impl_->workers.clear();

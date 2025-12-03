@@ -1,12 +1,12 @@
 // ============================================================================
-// test_poisson_detector.cpp -- Test PoissonDetector for ROI classifier
+// test_poisson.cpp -- Test Poisson class for ROI classifier
 // ============================================================================
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
 
-#include "poisson_detector.hpp"  // adjust path as needed
+#include "poisson.hpp"  // For PoissonDetector
 
 #define EXPECT_TRUE(x) do{ \
   if(!(x)){ \

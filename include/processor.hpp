@@ -39,30 +39,22 @@
 #include <vector>
 
 #include "slab_pool.hpp"   // For slab::SlabPool, slab::Desc
+#include "poisson.hpp"     // For ROI
 
 namespace pipeline {
-
-// ============================================================================
-// `ROI` class
-// Rectangle ROI in image pixel coords (row-major H×W, uint16 pixels)
-// ============================================================================
-struct ROI {
-  int x{0}, y{0}, w{0}, h{0};
-  uint32_t threshold{0};   // classify occupied if sum >= threshold
-};
 
 // ============================================================================
 // `ProcessorConfig` class
 // Configuration for the `Processor` class
 // ============================================================================
 struct ProcessorConfig {
-  uint32_t image_w{4096};         // width of the image in pixels
-  uint32_t image_h{256};          // height of the image in pixels
-  int      cpu_affinity{-1};      // -1 = don't pin ingress thread
-  bool     print_stdout{false};   // print to stdout if no callback
-  uint64_t interval_print{0};     // print every Nth frame
-  uint32_t worker_threads{0};     // 0 => use hardware_concurrency(), 1 => single-thread
-  std::string output_file_path{}; // if set, create directory and file for results
+  std::size_t image_w{4096};         // width of the image in pixels
+  std::size_t image_h{256};          // height of the image in pixels
+  int         cpu_affinity{-1};      // -1 = don't pin ingress thread
+  bool        print_stdout{false};   // print to stdout if no callback
+  uint64_t    interval_print{0};     // print every Nth frame
+  uint32_t    worker_threads{0};     // 0 => use hardware_concurrency(), 1 => single-thread
+  std::string output_path{};         // if set, create directory and file for results
 };
 
 /// Pop function the processor uses to get descriptors from your SPSC queue.
