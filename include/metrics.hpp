@@ -29,7 +29,6 @@ namespace pipeline {
 // Snapshot of metrics at a point in time, with derived rates.
 // ============================================================================
 struct PipelineMetricsSnapshot {
-  // timestamps (nanoseconds since steady_clock::epoch)
   std::uint64_t start_ns{0};
   std::uint64_t now_ns{0};
   double        elapsed_sec{0.0};

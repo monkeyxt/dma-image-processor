@@ -112,10 +112,10 @@ static inline uint64_t sum_roi_u16(const uint16_t* img,
 // ============================================================================
 struct Processor::Impl {
   /// Constructor for the `Impl` class
-  /// @param pool_ The slab memory pool to use
-  /// @param cfg_ The processor configuration
-  /// @param pop_fn_ The function to use to pop descriptors from the slab memory
-  /// @param rois_ The ROIs to process
+  /// @param pool_      The slab memory pool to use
+  /// @param cfg_       The processor configuration
+  /// @param pop_fn_    The function to use to pop descriptors from the slab memory
+  /// @param rois_      The ROIs to process
   /// @param on_result_ The function to use to process the results
     Impl(slab::SlabPool& pool_, ProcessorConfig cfg_, PopFn pop_fn_,
          std::vector<ROI> rois_, ResultCallback on_result_)
@@ -128,7 +128,7 @@ struct Processor::Impl {
   PopFn            pop_fn;
   std::vector<ROI> rois;
   ResultCallback   on_result;
-  std::FILE*       output_file{nullptr};  // if set, write results to this file
+  std::FILE*       output_file{nullptr};
 
   /// Ingress + worker threads
   std::thread              ingress_th;
@@ -141,9 +141,9 @@ struct Processor::Impl {
   std::vector<uint64_t>    roi_sums;
   std::vector<uint8_t>     roi_occ;
 
-  std::atomic<size_t>      next_roi{0};     // next ROI to process
-  std::atomic<unsigned>    workers_left{0}; // workers left to finish frame
-  std::atomic<uint64_t>    frame_epoch{0};  // increments for each new frame
+  std::atomic<size_t>      next_roi{0};       // next ROI to process
+  std::atomic<unsigned>    workers_left{0};   // workers left to finish frame
+  std::atomic<uint64_t>    frame_epoch{0};    // increments for each new frame
 
   std::mutex               frame_mtx;         // frame_cv waits for frame done
   std::condition_variable  frame_cv;          // ingress waits for frame done
@@ -194,7 +194,11 @@ struct Processor::Impl {
       const uint16_t* img = cur_img;
       const int img_w = static_cast<int>(cfg.image_w);
 
-      // Work-stealing over ROI indices
+      /// Work-stealing over ROI indices
+      /// This is a work-stealing algorithm that allows the workers to steal 
+      /// work from each other. The workers will steal work from the next_roi 
+      /// index until the next_roi index is greater than or equal to the number 
+      /// of ROIs.
       for (;;) {
         size_t idx = next_roi.fetch_add(1, std::memory_order_relaxed);
         if (idx >= rois.size()) break;
@@ -205,7 +209,7 @@ struct Processor::Impl {
         roi_occ[idx]  = (s >= r.threshold) ? 1u : 0u;
       }
 
-      // Signal completion for this worker
+      /// Signal completion for this worker
       if (workers_left.fetch_sub(1, std::memory_order_acq_rel) == 1u) {
         std::lock_guard lk(frame_mtx);
         frame_cv.notify_one();
@@ -242,7 +246,7 @@ struct Processor::Impl {
         continue;
       }
 
-      // Set current frame state
+      /// Set current frame state
       cur_desc = d;
       cur_img  = reinterpret_cast<const uint16_t*>(buf.data);
       next_roi.store(0, std::memory_order_relaxed);
@@ -250,6 +254,8 @@ struct Processor::Impl {
                          std::memory_order_release);
 
       /// Kick workers with new epoch
+      /// This is a new epoch for the frame. The workers will process the frame 
+      /// with the new epoch.
       frame_epoch.fetch_add(1, std::memory_order_acq_rel);
       {
         std::lock_guard lk(start_mtx);
@@ -328,7 +334,7 @@ void Processor::start() {
     n = std::max(1u, std::thread::hardware_concurrency());
   }
   
-  // Create output directory and file if configured
+  /// Create output directory and file if configured
   if (!impl_->cfg.output_path.empty()) {
     namespace fs = std::filesystem;
     fs::path file_path(impl_->cfg.output_path);
@@ -352,7 +358,7 @@ void Processor::start() {
     }
   }
   
-  // Announce Processor configuration when starting
+  /// Announce Processor configuration when starting
   std::printf("PROC: Running with config:\n");
   std::printf("  image_w=%zu\n", impl_->cfg.image_w);
   std::printf("  image_h=%zu\n", impl_->cfg.image_h);
@@ -398,7 +404,7 @@ void Processor::stop() {
   }
   impl_->workers.clear();
   
-  // Close output file if opened
+  /// Close output file if opened
   if (impl_->output_file) {
     std::fclose(impl_->output_file);
     impl_->output_file = nullptr;

@@ -38,22 +38,23 @@
 namespace pipeline {
 
 // ============================================================================
-// ArchiverConfig: configuration for the Archiver class
+// `ArchiverConfig` class
+// Configuration for the `Archiver` class
 // ============================================================================
 struct ArchiverConfig {
-  std::string output_dir      = "archive";
-  std::string file_prefix     = "frames";
-  std::size_t segment_bytes   = 4ull * 1024 * 1024 * 1024; // rotate at ~4 GiB
-  std::size_t io_buffer_bytes = 8ull * 1024 * 1024;        // stdio buffer (fallback)
-  int         cpu_affinity    = -1;                        // -1 = no pin
-  bool        make_index      = true;                      // write a simple (seq,offset) text index
+  std::string output_dir      { "archive" };
+  std::string file_prefix     { "frames" };
+  std::size_t segment_bytes   { 4ull * 1024 * 1024 * 1024 }; // rotate at ~4 GiB
+  std::size_t io_buffer_bytes { 8ull * 1024 * 1024 };        // stdio buffer (fallback)
+  int         cpu_affinity    { -1 };                        // -1 = no pin
+  bool        make_index      { true };                      // write a simple (seq,offset) text index
 
-  // io_uring / direct I/O (Linux-only; ignored on other OSes)
-  bool        use_io_uring    = false;   // enable io_uring backend
-  bool        direct_io       = false;   // open with O_DIRECT (requires aligned writes)
-  unsigned    uring_qd        = 64;      // SQ/CQ depth
-  unsigned    max_inflight    = 32;      // cap in-flight write requests
-  std::size_t block_bytes     = 4096;    // alignment & size multiple when using O_DIRECT
+  /// io_uring / direct I/O (Linux-only; ignored on other OSes)
+  bool        use_io_uring    { false };   // enable io_uring backend
+  bool        direct_io       { false };   // open with O_DIRECT (requires aligned writes)
+  unsigned    uring_qd        { 64 };      // SQ/CQ depth
+  unsigned    max_inflight    { 32 };      // cap in-flight write requests
+  std::size_t block_bytes     { 4096 };    // alignment & size multiple when using O_DIRECT
 };
 
 /// Pop function the archiver uses to get work from your SPSC queue.
@@ -66,9 +67,9 @@ using PopFn = std::function<bool(slab::Desc&)>;
 class Archiver {
 public:
   /// Constructor for the Archiver class
-  /// @param pool The slab memory pool to use
-  /// @param cfg The archiver configuration
-  /// @param pop_fn The function to use to pop descriptors from the slab memory
+  /// @param pool     The slab memory pool to use
+  /// @param cfg      The archiver configuration
+  /// @param pop_fn   The function to use to pop descriptors from the slab memory
   Archiver(slab::SlabPool& pool, ArchiverConfig cfg, PopFn pop_fn);
   ~Archiver();
 

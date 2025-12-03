@@ -2,8 +2,7 @@
 // processor.hpp -- Processor for ROI occupancy detection
 //
 // This header defines the Processor class responsible for analyzing slab-backed
-// image frames (e.g., from DMA input) and performing region-of-interest (ROI)
-// evaluation for photon occupancy detection.
+// image frames (e.g., from DMA input)
 //
 // Core features:
 //
@@ -17,7 +16,6 @@
 //   classification.
 //
 // Types and interfaces defined:
-// - ROI: Structure representing a rectangular region with a threshold.
 // - ProcessorConfig: Configuration options (dimensions, CPU pinning, 
 //   threading, output).
 // - PopFn, ResultCallback: Functional types for input dequeuing and result 
@@ -48,13 +46,13 @@ namespace pipeline {
 // Configuration for the `Processor` class
 // ============================================================================
 struct ProcessorConfig {
-  std::size_t image_w{4096};         // width of the image in pixels
-  std::size_t image_h{256};          // height of the image in pixels
-  int         cpu_affinity{-1};      // -1 = don't pin ingress thread
-  bool        print_stdout{false};   // print to stdout if no callback
-  uint64_t    interval_print{0};     // print every Nth frame
-  uint32_t    worker_threads{0};     // 0 => use hardware_concurrency(), 1 => single-thread
-  std::string output_path{};         // if set, create directory and file for results
+  std::size_t image_w         { 4096 };   // width of the image in pixels
+  std::size_t image_h         { 256 };    // height of the image in pixels
+  int         cpu_affinity    { -1 };     // -1 = don't pin ingress thread
+  bool        print_stdout    { false };  // print to stdout if no callback
+  uint64_t    interval_print  { 0 };      // print every Nth frame
+  uint32_t    worker_threads  { 0 };      // 0 => use hardware_concurrency(), 1 => single-thread
+  std::string output_path     { "" };     // if set, create directory and file for results
 };
 
 /// Pop function the processor uses to get descriptors from your SPSC queue.

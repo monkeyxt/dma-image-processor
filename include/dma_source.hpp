@@ -30,11 +30,11 @@ struct DmaConfig {
   bool     paced           { true };     // sleep_until(period) if true
   int      frame_period_us { 1000 };     // 1 kFPS
   int      cpu_affinity    { -1 };       // -1 = no pinning
-  int      thread_nice     { 0 };
+  int      thread_nice     { 0 };        // 0 = no nicing
   uint32_t nth_archive     { 0 };        // 0 = disable arch publishing
-  uint32_t expected_w      { 4096 };
-  uint32_t expected_h      { 256  };
-  bool     loop_frames     { true };     // if true, loop through frames; if false, stop at end
+  uint32_t expected_w      { 4096 };     // width of the image in pixels
+  uint32_t expected_h      { 256  };     // height of the image in pixels
+  bool     loop_frames     { true };     // toggle for loop mode
 };
 
 using ProcCallback = std::function<void(const slab::Desc&)>;
@@ -47,10 +47,10 @@ using ArchCallback = std::function<void(const slab::Desc&)>;
 class DmaSource {
 public:
   /// Constructor for the DmaSource class.
-  /// @param pool The slab pool to use.
-  /// @param cfg The configuration for the DmaSource.
-  /// @param proc_cb The callback to use for processing the frames.
-  /// @param arch_cb The callback to use for archiving the frames.
+  /// @param pool     The slab pool to use.
+  /// @param cfg      The configuration for the DmaSource.
+  /// @param proc_cb  The callback to use for processing the frames.
+  /// @param arch_cb  The callback to use for archiving the frames.
   DmaSource(slab::SlabPool& pool, DmaConfig cfg,
             ProcCallback proc_cb, ArchCallback arch_cb = {});
   ~DmaSource();
@@ -71,7 +71,7 @@ public:
   void stop();
 
   /// Set the paced mode.
-  /// @param paced Whether to pace the frames.
+  /// @param paced     Toggle for paced mode.
   /// @param period_us The period in microseconds to pace the frames.
   void set_paced(bool paced, int period_us);
 
@@ -80,7 +80,7 @@ public:
   void set_nth_archive(uint32_t n);
 
   /// Set whether to loop through frames.
-  /// @param loop If true, continuously loop through frames; if false, stop at end.
+  /// @param loop Toggle for loop mode.
   void set_loop_frames(bool loop);
 
   struct Stats {
