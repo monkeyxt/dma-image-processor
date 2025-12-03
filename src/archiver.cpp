@@ -119,7 +119,8 @@ struct Archiver::Impl {
   }
 
   /// Open the current segment binary file for writing, and the index file if 
-  /// requested.
+  /// requested. This is the fallback function for writing data to the current 
+  /// segment binary file without io_uring.
   bool open_segment_stdio() {
     close_segment_stdio();
     const auto path = make_segment_name(cfg, seg_idx);
@@ -139,6 +140,10 @@ struct Archiver::Impl {
     stats_.rotations.fetch_add(1, std::memory_order_relaxed);
     return true;
   }
+
+  /// Close the current segment binary file and index file without io_uring.
+  /// This is the close function for writing data to the current segment binary 
+  /// file without io_uring.
   void close_segment_stdio() {
     if (seg_fp) { std::fflush(seg_fp); std::fclose(seg_fp); seg_fp=nullptr; }
     if (idx_fp) { std::fflush(idx_fp); std::fclose(idx_fp); idx_fp=nullptr; }
@@ -146,7 +151,8 @@ struct Archiver::Impl {
 
 #if PIPE_HAS_URING
   /// Open the current segment binary file for writing, and the index file if 
-  /// requested with io_uring.
+  /// requested with io_uring. This is the open function for writing data to the 
+  /// current segment binary file with io_uring.
   bool open_segment_uring() {
     close_segment_uring();
     const auto path = make_segment_name(cfg, seg_idx);
@@ -175,8 +181,12 @@ struct Archiver::Impl {
     stats_.rotations.fetch_add(1, std::memory_order_relaxed);
     return true;
   }
+
+  /// Close the current segment binary file and index file with io_uring.
+  /// This is the close function for writing data to the current segment binary 
+  /// file with io_uring.
   void close_segment_uring() {
-    // drain completions
+    /// Drain completions
     if (fd_data >= 0) {
       io_uring_cqe* cqe;
       while (inflight > 0) {
@@ -197,7 +207,14 @@ struct Archiver::Impl {
     if (fd_idx >= 0) { ::close(fd_idx); fd_idx = -1; }
     if (fd_data >= 0) { ::close(fd_data); fd_data = -1; }
   }
+
   /// Enqueue a write; waits for a completion if queue/inflight are full
+  /// This is the main function for writing data to the current segment binary 
+  /// file with io_uring.
+  /// @param data       The data to write
+  /// @param len        The length of the data to write
+  /// @param offset     The offset to write the data to
+  /// @return           True if the write was successful, false otherwise
   bool uring_write(const void* data, std::size_t len, off_t offset) {
     /// enforce O_DIRECT alignment if requested
     if (cfg.direct_io) {
@@ -212,8 +229,14 @@ struct Archiver::Impl {
     }
 
     for (;;) {
+
+      /// Inflight here refers to the number of I/O write operations that have 
+      /// been submitted to io_uring but have not yet completed. If the number 
+      /// of inflight requests reaches the configured maximum, we wait for at 
+      /// least one I/O completion before submitting another write.
       if (inflight >= cfg.max_inflight) {
-        /// wait for one completion
+        /// Too many in-flight requests: wait for at least one to complete 
+        /// before continuing
         io_uring_cqe* cqe;
         if (io_uring_wait_cqe(&ring, &cqe) == 0) {
           if (cqe->res < 0) {
@@ -225,7 +248,7 @@ struct Archiver::Impl {
         }
         continue;
       }
-
+      /// Get a new submission entry from the io_uring queue.
       io_uring_sqe* sqe = io_uring_get_sqe(&ring);
       if (!sqe) {
         stats_.uring_sq_full.fetch_add(1, std::memory_order_relaxed);
@@ -246,12 +269,13 @@ struct Archiver::Impl {
       return true;
     }
   }
+
+  /// Write the index file with io_uring.
   bool uring_write_index(uint64_t seq, uint64_t off) {
     if (!cfg.make_index) return true;
     char line[64];
     int  n = std::snprintf(line, sizeof(line), "%llu %llu\n",
                            (unsigned long long)seq, (unsigned long long)off);
-    /// Small writes — just use ::write() synchronously for the index
     ssize_t wr = ::write(fd_idx, line, n);
     return wr == n;
   }
@@ -260,9 +284,6 @@ struct Archiver::Impl {
   /// Main loop for the archiver
   void loop() {
     pin_thread();
-    // Directory already ensured in start(), but ensure it exists here too for safety
-    // ensure_dir();
-
     const bool use_uring = (cfg.use_io_uring && PIPE_HAS_URING);
 
     /// Open first segment lazily on first write

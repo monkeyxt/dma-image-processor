@@ -367,7 +367,6 @@ int main(int argc, char** argv) {
     proc.start();
     dma.start();
     if (dcfg.loop_frames) {
-      // Original behavior: fixed time run
       std::this_thread::sleep_for(std::chrono::duration<double>(run_seconds));
     } else {
       printf("MAIN: Waiting for DMA and PROC to finish...\n");
@@ -382,8 +381,8 @@ int main(int argc, char** argv) {
     std::puts("MAIN: Stopping pipeline...");
     dma.stop();
     
-    // If DRAIN_QUEUES is true, wait for queues to drain so all frames are 
-    // processed. Otherwise, the pipeline will stop when the DMA is terminated.
+    /// If DRAIN_QUEUES is true, wait for queues to drain so all frames are 
+    /// processed. Otherwise, the pipeline will stop when the DMA is terminated.
     /// This might cause some frames to be dropped by the PROC or ARCH.
     if (DRAIN_QUEUES) {
       printf("MAIN: Waiting for queues to drain...\n");
