@@ -51,25 +51,3 @@ make
 └─────────────┘    └──────┘└──────┘  └────┘  └────┘
 
 ```
-
-The system is designed as a high-throughput, lock-free, multi-threaded frame pipeline for DMA-capable imaging applications. Its architecture is modular, separating responsibility between memory management, frame sequencing, processing, and archiving.
-
-### DMA Source
-- Ingests frames from external sources (hardware, files, memory)
-- Supports "paced" mode to control frame rate
-- Handles both processing and archiving paths via callbacks
-
-### Slab Pool
-- Manages a pool of fixed-size, aligned frame buffers ("slabs")
-- Provides lock-free allocation and reclamation
-- Allows multiple consumers to share slabs without blocking
-
-### Processor
-- Processes data from a lock-free `spsc_ring` queue
-- Optimized for modern CPUs with SIMD instructions (AVX2/AVX512)
-- Supports efficient multithreading
-
-### Archiver
-- Archives frames from a lock-free `spsc_ring` queue
-- Supports Linux zero-copy `io_uring` interface for asynchronous, low-overhead disk writes
-- Configurable to archive every Nth frame for reduced I/O and storage needs

@@ -72,7 +72,7 @@ constexpr uint32_t SLABS          = 128;
 constexpr int      FPS            = 1000;      // 1 kFPS target
 constexpr int      FRAME_PERIOD   = 1000000 / FPS;
 constexpr uint32_t NTH_ARCHIVE    = 10;        // every 10th frame archived
-constexpr bool     DRAIN_QUEUES   = false;   // drain queues after processing
+constexpr bool     DRAIN_QUEUES   = false;     // drain queues after processing
 
 // ============================================================================
 // ROI grid configuration
@@ -359,6 +359,12 @@ int main(int argc, char** argv) {
     } else {
       std::puts("MAIN: Pacing frames is disabled");
       std::puts("MAIN: Frames will be delivered as fast as possible");
+    }
+
+    if (DRAIN_QUEUES) {
+      std::puts("MAIN: Draining queues is enabled");
+    } else {
+      std::puts("MAIN: Draining queues is disabled");
     }
 
     auto t0 = std::chrono::steady_clock::now();
