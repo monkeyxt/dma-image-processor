@@ -13,8 +13,21 @@
 #include "processor.hpp"
 #include "spsc_ring.hpp"
 
-#define EXPECT_TRUE(x) do{ if(!(x)){ std::fprintf(stderr,"EXPECT_TRUE failed: %s @ %s:%d\n",#x,__FILE__,__LINE__); std::abort(); } }while(0)
-#define EXPECT_EQ(a,b) do{ auto _va=(a), _vb=(b); if(!((_va)==(_vb))){ std::fprintf(stderr,"EXPECT_EQ failed: %s=%lld %s=%lld @ %s:%d\n",#a,(long long)_va,#b,(long long)_vb,__FILE__,__LINE__); std::abort(); } }while(0)
+#define EXPECT_TRUE(x) do{ \
+  if(!(x)){ \
+    std::fprintf(stderr,"EXPECT_TRUE failed: %s @ %s:%d\n",#x,__FILE__,__LINE__); \
+    std::abort(); \
+  } \
+}while(0)
+
+#define EXPECT_EQ(a,b) do{ \
+  auto _va=(a); auto _vb=(b); \
+  if(!((_va)==(_vb))){ \
+    std::fprintf(stderr,"EXPECT_EQ failed: %s=%lld %s=%lld @ %s:%d\n", \
+                 #a,(long long)_va,#b,(long long)_vb,__FILE__,__LINE__); \
+    std::abort(); \
+  } \
+}while(0)
 
 using slab::SlabPool;
 using slab::Desc;

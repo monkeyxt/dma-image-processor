@@ -1,4 +1,6 @@
-// test_spsc_ring.cpp
+// ============================================================================
+// test_spsc_ring.cpp -- Test SPSC Ring for DMA Image Processor
+// ============================================================================
 #include <cassert>
 #include <chrono>
 #include <cstdio>
@@ -9,9 +11,21 @@
 #include <immintrin.h>  // for _mm_pause()
 #include "spsc_ring.hpp"
 
-// Simple expect helper
-#define EXPECT_TRUE(x) do { if(!(x)){ std::fprintf(stderr,"EXPECT_TRUE failed: %s @ %s:%d\n",#x,__FILE__,__LINE__); std::abort(); } } while(0)
-#define EXPECT_EQ(a,b) do { auto _va=(a); auto _vb=(b); if(!((_va)==(_vb))){ std::fprintf(stderr,"EXPECT_EQ failed: %s=%lld %s=%lld @ %s:%d\n",#a,(long long)_va,#b,(long long)_vb,__FILE__,__LINE__); std::abort(); } } while(0)
+#define EXPECT_TRUE(x) do{ \
+  if(!(x)){ \
+    std::fprintf(stderr,"EXPECT_TRUE failed: %s @ %s:%d\n",#x,__FILE__,__LINE__); \
+    std::abort(); \
+  } \
+}while(0)
+
+#define EXPECT_EQ(a,b) do{ \
+  auto _va=(a); auto _vb=(b); \
+  if(!((_va)==(_vb))){ \
+    std::fprintf(stderr,"EXPECT_EQ failed: %s=%lld %s=%lld @ %s:%d\n", \
+                 #a,(long long)_va,#b,(long long)_vb,__FILE__,__LINE__); \
+    std::abort(); \
+  } \
+}while(0)
 
 struct Desc { int id; }; // trivial payload for tests
 
