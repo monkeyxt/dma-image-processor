@@ -260,7 +260,8 @@ struct Archiver::Impl {
   /// Main loop for the archiver
   void loop() {
     pin_thread();
-    ensure_dir();
+    // Directory already ensured in start(), but ensure it exists here too for safety
+    // ensure_dir();
 
     const bool use_uring = (cfg.use_io_uring && PIPE_HAS_URING);
 
@@ -373,6 +374,29 @@ Archiver::~Archiver() { stop(); }
 
 void Archiver::start() {
   if (impl_->run.exchange(true)) return;
+  
+  // Ensure output directory exists (may create timestamped subdirectory)
+  impl_->ensure_dir();
+  
+  // Announce Archiver configuration when starting
+  std::printf("ARCH: Running with config:\n");
+
+  std::printf("  segment_bytes=%llu (%.2f GiB)\n", 
+              (unsigned long long)impl_->cfg.segment_bytes,
+              impl_->cfg.segment_bytes / (1024.0 * 1024.0 * 1024.0));
+  std::printf("  io_buffer_bytes=%llu (%.2f MiB)\n",
+              (unsigned long long)impl_->cfg.io_buffer_bytes,
+              impl_->cfg.io_buffer_bytes / (1024.0 * 1024.0));
+  std::printf("  make_index=%s\n", impl_->cfg.make_index ? "true" : "false");
+  std::printf("  use_io_uring=%s\n", impl_->cfg.use_io_uring ? "true" : "false");
+  if (impl_->cfg.use_io_uring) {
+    std::printf("  uring_qd=%u  max_inflight=%u\n", 
+                impl_->cfg.uring_qd, impl_->cfg.max_inflight);
+  }
+  std::printf("  direct_io=%s\n", impl_->cfg.direct_io ? "true" : "false");
+  std::printf("  output_dir=%s\n", impl_->cfg.output_dir.c_str());
+  std::printf("  file_prefix=%s\n", impl_->cfg.file_prefix.c_str());
+  
   impl_->th = std::thread([this]{ impl_->loop(); });
 }
 

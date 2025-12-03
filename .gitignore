@@ -62,3 +62,6 @@ CTestTestfile.cmake
 
 #images
 images/png/
+
+#scratch files
+scripts/

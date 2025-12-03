@@ -4,10 +4,13 @@
 #include "processor.hpp"
 
 #include <cstdio>
+#include <ctime>
 #include <cstring>
 #include <stdexcept>
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <filesystem>
 
 #if defined(__linux__)
   #include <pthread.h>
@@ -125,6 +128,7 @@ struct Processor::Impl {
   PopFn            pop_fn;
   std::vector<ROI> rois;
   ResultCallback   on_result;
+  std::FILE*       output_file{nullptr};  // if set, write results to this file
 
   /// Ingress + worker threads
   std::thread              ingress_th;
@@ -262,17 +266,32 @@ struct Processor::Impl {
       }
       if (!run.load(std::memory_order_relaxed)) break;
 
-      /// Results ready: callback or print
+      /// Results ready: callback, file, or print
       bool keep_running = true;
       if (on_result) {
         keep_running = on_result(d.seq, roi_sums, roi_occ);
-      } else if (cfg.print_stdout) {
+      } else if (output_file) {
+        std::fprintf(output_file, "[frame %llu] rois=%zu\n",
+                     (unsigned long long)d.seq, rois.size());
+        for (size_t i = 0; i < roi_occ.size(); ++i) {
+          std::fprintf(output_file, "%u", static_cast<unsigned int>(roi_occ[i]));
+        }
+        std::fprintf(output_file, "\n");
+      } else if (cfg.print_stdout && (d.seq % cfg.interval_print == 0ull)) {
         uint64_t occ_count = 0;
         for (auto v : roi_occ) occ_count += v;
         std::printf("seq=%llu rois=%zu occupied=%llu\n",
                     (unsigned long long)d.seq,
                     rois.size(),
                     (unsigned long long)occ_count);
+        
+        
+        std::printf("[frame %llu] rois=%zu\n",
+                    (unsigned long long)d.seq, rois.size());
+        for (size_t i = 0; i < roi_occ.size(); ++i) {
+          std::printf("%u", static_cast<unsigned int>(roi_occ[i]));
+        }
+        std::printf("\n");            
       }
 
       /// Release the slab for processor path
@@ -308,6 +327,53 @@ void Processor::start() {
   if (n == 0) {
     n = std::max(1u, std::thread::hardware_concurrency());
   }
+  
+  // Create output directory and file if configured
+  if (!impl_->cfg.output_file_path.empty()) {
+    namespace fs = std::filesystem;
+    fs::path file_path(impl_->cfg.output_file_path);
+    fs::path dir_path = file_path.parent_path();
+    
+    if (!dir_path.empty()) {
+      std::error_code ec;
+      if (!fs::exists(dir_path, ec)) {
+        fs::create_directories(dir_path, ec);
+        if (ec) {
+          throw std::runtime_error(
+            "PROC: failed to create output directory: " + ec.message());
+        }
+      }
+    }
+    
+    impl_->output_file = std::fopen(impl_->cfg.output_file_path.c_str(), "w");
+    if (!impl_->output_file) {
+      throw std::runtime_error(
+        "PROC: failed to open output file: " + impl_->cfg.output_file_path);
+    }
+  }
+  
+  // Announce Processor configuration when starting
+  std::printf("PROC: Running with config:\n");
+  std::printf("  image_w=%u\n", impl_->cfg.image_w);
+  std::printf("  image_h=%u\n", impl_->cfg.image_h);
+  std::printf("  worker_threads=%u\n", n);
+  std::printf("  cpu_affinity=%d\n", impl_->cfg.cpu_affinity);
+  std::printf("  print_stdout=%s\n", impl_->cfg.print_stdout ? "true" : "false");
+  if (impl_->cfg.print_stdout) {
+    std::printf("  interval_print=%llu\n", 
+                (unsigned long long)impl_->cfg.interval_print);
+  }
+#if defined(__AVX2__)
+  std::printf("  AVX2=enabled\n");
+#elif defined(__AVX__)
+  std::printf("  AVX=enabled\n");
+#else
+  std::printf("  AVX=disabled (using scalar fallback)\n");
+#endif
+  if (!impl_->cfg.output_file_path.empty()) {
+    std::printf("  output_file=%s\n", impl_->cfg.output_file_path.c_str());
+  }
+  
   impl_->workers.clear();
   impl_->workers.reserve(n);
   for (unsigned i = 0; i < n; ++i) {
@@ -331,6 +397,12 @@ void Processor::stop() {
     if (t.joinable()) t.join();
   }
   impl_->workers.clear();
+  
+  // Close output file if opened
+  if (impl_->output_file) {
+    std::fclose(impl_->output_file);
+    impl_->output_file = nullptr;
+  }
 }
 
 const Processor::Stats& Processor::stats() const noexcept {

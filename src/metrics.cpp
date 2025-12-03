@@ -1,5 +1,20 @@
 // ============================================================================
 // metrics.cpp -- implementation of PipelineMetrics
+//
+// PipelineMetrics tracks the following counters for pipeline statistics:
+//
+// dma_frames_          : Number of frames delivered by the DMA source.
+// dma_arch_offered_    : Number of frames that DMA offered to the archiver queue.
+// dma_pool_exhaust_    : Number of times the DMA source could not acquire a free slab from the pool.
+// proc_frames_         : Number of frames processed by the processor.
+// proc_stale_desc_     : Number of stale descriptor references seen by the processor.
+// arch_frames_         : Number of frames written by the archiver.
+// arch_bytes_          : Total bytes written by the archiver.
+// arch_rotations_      : Number of output segment rotations/events in the archiver.
+// arch_stale_desc_     : Number of stale descriptors encountered by the archiver.
+// arch_io_errors_      : Number of I/O errors during archiving.
+// drops_proc_queue_    : Number of frames dropped due to a full processor queue.
+// drops_arch_queue_    : Number of frames dropped due to a full archiver queue.
 // ============================================================================
 #include "metrics.hpp"
 
@@ -15,6 +30,7 @@ PipelineMetrics::PipelineMetrics()
     dma_pool_exhaust_(0),
     proc_frames_(0),
     proc_stale_desc_(0),
+    proc_empty_polls_(0),
     arch_frames_(0),
     arch_bytes_(0),
     arch_rotations_(0),
@@ -39,6 +55,9 @@ void PipelineMetrics::mark_proc_frame(std::uint64_t n) {
 }
 void PipelineMetrics::mark_proc_stale_desc(std::uint64_t n) {
   proc_stale_desc_.fetch_add(n, std::memory_order_relaxed);
+}
+void PipelineMetrics::mark_proc_empty_polls(std::uint64_t n) {
+  proc_empty_polls_.fetch_add(n, std::memory_order_relaxed);
 }
 
 void PipelineMetrics::mark_arch_frame(std::uint64_t n) {
@@ -72,6 +91,7 @@ void PipelineMetrics::reset() {
 
   proc_frames_.store(0, std::memory_order_relaxed);
   proc_stale_desc_.store(0, std::memory_order_relaxed);
+  proc_empty_polls_.store(0, std::memory_order_relaxed);
 
   arch_frames_.store(0, std::memory_order_relaxed);
   arch_bytes_.store(0, std::memory_order_relaxed);
@@ -102,6 +122,7 @@ PipelineMetricsSnapshot PipelineMetrics::snapshot() const {
 
   s.proc_frames       = proc_frames_.load(std::memory_order_relaxed);
   s.proc_stale_desc   = proc_stale_desc_.load(std::memory_order_relaxed);
+  s.proc_empty_polls  = proc_empty_polls_.load(std::memory_order_relaxed);
 
   s.arch_frames       = arch_frames_.load(std::memory_order_relaxed);
   s.arch_bytes        = arch_bytes_.load(std::memory_order_relaxed);
@@ -127,30 +148,32 @@ void PipelineMetrics::print(std::FILE* out) const {
   PipelineMetricsSnapshot s = snapshot();
 
   std::fprintf(out,
-    "=== Pipeline Metrics (elapsed %.3f s) ===\n"
-    "DMA:    frames=%llu  arch_offered=%llu  pool_exhaust=%llu  fps=%.1f\n"
-    "PROC:   frames=%llu  stale_desc=%llu  fps=%.1f\n"
+    "\n=== Component Stats ===\n"
+    "DMA:    produced=%llu  archived_offered=%llu  pool_exhaust=%llu\n"
+    "PROC:   frames=%llu  stale_desc=%llu  empty_polls=%llu\n"
     "ARCH:   frames=%llu  bytes=%llu  rotations=%llu  stale_desc=%llu  io_errors=%llu\n"
-    "        fps=%.1f  bw=%.3f GB/s (%.3f GiB/s)\n"
-    "DROPS:  proc_q=%llu  arch_q=%llu\n",
-    s.elapsed_sec,
+    "\n=== End-to-end throughput ===\n"
+    "Elapsed: %.3f s\n"
+    "DMA:     %.1f fps\n"
+    "PROC:    %.1f fps\n"
+    "ARCH:    %.1f fps | %.3f GB/s (%.3f GiB/s)\n",
     (unsigned long long)s.dma_frames,
     (unsigned long long)s.dma_arch_offered,
     (unsigned long long)s.dma_pool_exhaust,
-    s.dma_fps,
     (unsigned long long)s.proc_frames,
     (unsigned long long)s.proc_stale_desc,
-    s.proc_fps,
+    (unsigned long long)s.proc_empty_polls,
     (unsigned long long)s.arch_frames,
     (unsigned long long)s.arch_bytes,
     (unsigned long long)s.arch_rotations,
     (unsigned long long)s.arch_stale_desc,
     (unsigned long long)s.arch_io_errors,
+    s.elapsed_sec,
+    s.dma_fps,
+    s.proc_fps,
     s.arch_fps,
     s.arch_gbps,
-    s.arch_gibps,
-    (unsigned long long)s.drops_proc_queue,
-    (unsigned long long)s.drops_arch_queue
+    s.arch_gibps
   );
 }
 

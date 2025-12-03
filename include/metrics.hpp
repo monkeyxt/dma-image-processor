@@ -1,5 +1,20 @@
 // ============================================================================
-// metrics.hpp -- simple metrics for DMA → Processor → Archiver pipeline
+// metrics.hpp -- PipelineMetrics
+//
+// PipelineMetrics tracks the following counters for pipeline statistics:
+//
+// dma_frames_          : Number of frames delivered by the DMA source.
+// dma_arch_offered_    : Number of frames that DMA offered to the archiver queue.
+// dma_pool_exhaust_    : Number of times the DMA source could not acquire a free slab from the pool.
+// proc_frames_         : Number of frames processed by the processor.
+// proc_stale_desc_     : Number of stale descriptor references seen by the processor.
+// arch_frames_         : Number of frames written by the archiver.
+// arch_bytes_          : Total bytes written by the archiver.
+// arch_rotations_      : Number of output segment rotations/events in the archiver.
+// arch_stale_desc_     : Number of stale descriptors encountered by the archiver.
+// arch_io_errors_      : Number of I/O errors during archiving.
+// drops_proc_queue_    : Number of frames dropped due to a full processor queue.
+// drops_arch_queue_    : Number of frames dropped due to a full archiver queue.
 // ============================================================================
 #pragma once
 #include <atomic>
@@ -26,6 +41,7 @@ struct PipelineMetricsSnapshot {
 
   std::uint64_t proc_frames{0};
   std::uint64_t proc_stale_desc{0};
+  std::uint64_t proc_empty_polls{0};
 
   std::uint64_t arch_frames{0};
   std::uint64_t arch_bytes{0};
@@ -61,6 +77,7 @@ public:
 
   void mark_proc_frame(std::uint64_t n = 1);
   void mark_proc_stale_desc(std::uint64_t n = 1);
+  void mark_proc_empty_polls(std::uint64_t n = 1);
 
   void mark_arch_frame(std::uint64_t n = 1);
   void mark_arch_bytes(std::uint64_t bytes);
@@ -91,6 +108,7 @@ private:
 
   std::atomic<std::uint64_t> proc_frames_;
   std::atomic<std::uint64_t> proc_stale_desc_;
+  std::atomic<std::uint64_t> proc_empty_polls_;
 
   std::atomic<std::uint64_t> arch_frames_;
   std::atomic<std::uint64_t> arch_bytes_;

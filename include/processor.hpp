@@ -30,6 +30,8 @@
 #pragma once
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
@@ -58,7 +60,9 @@ struct ProcessorConfig {
   uint32_t image_h{256};          // height of the image in pixels
   int      cpu_affinity{-1};      // -1 = don't pin ingress thread
   bool     print_stdout{false};   // print to stdout if no callback
-  unsigned worker_threads{0};     // 0 => use hardware_concurrency(), 1 => single-thread
+  uint64_t interval_print{0};     // print every Nth frame
+  uint32_t worker_threads{0};     // 0 => use hardware_concurrency(), 1 => single-thread
+  std::string output_file_path{}; // if set, create directory and file for results
 };
 
 /// Pop function the processor uses to get descriptors from your SPSC queue.

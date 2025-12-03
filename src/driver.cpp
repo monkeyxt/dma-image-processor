@@ -1,6 +1,5 @@
 // ============================================================================
 // `drive.cpp` -- End-to-end driver for DMA → Processor → Archiver
-// ============================================================================
 //
 // Usage:
 //   ./dma-image-processor <npy_dir> [run_seconds]
@@ -9,7 +8,6 @@
 //  - Sets up slab pool, SPSC queues, DMA source, processor, and archiver.
 //  - Uses PoissonDetector to set an occupancy threshold for all ROIs.
 //  - Runs for run_seconds (default 5 s) and prints stats.
-//
 // ============================================================================
 #include <atomic>
 #include <chrono>
@@ -32,8 +30,21 @@
 #include "poisson_detector.hpp"
 #include "metrics.hpp"
 
-#define EXPECT_TRUE(x) do{ if(!(x)){ std::fprintf(stderr,"EXPECT_TRUE failed: %s @ %s:%d\n",#x,__FILE__,__LINE__); std::abort(); } }while(0)
-#define EXPECT_EQ(a,b) do{ auto _va=(a), _vb=(b); if(!((_va)==(_vb))){ std::fprintf(stderr,"EXPECT_EQ failed: %s=%lld %s=%lld @ %s:%d\n",#a,(long long)_va,#b,(long long)_vb,__FILE__,__LINE__); std::abort(); } }while(0)
+#define EXPECT_TRUE(x) do{ \
+  if(!(x)){ \
+    std::fprintf(stderr,"EXPECT_TRUE failed: %s @ %s:%d\n",#x,__FILE__,__LINE__); \
+    std::abort(); \
+  } \
+}while(0)
+
+#define EXPECT_EQ(a,b) do{ \
+  auto _va=(a); auto _vb=(b); \
+  if(!((_va)==(_vb))){ \
+    std::fprintf(stderr,"EXPECT_EQ failed: %s=%lld %s=%lld @ %s:%d\n", \
+                 #a,(long long)_va,#b,(long long)_vb,__FILE__,__LINE__); \
+    std::abort(); \
+  } \
+}while(0)
 
 namespace fs = std::filesystem;
 
@@ -55,13 +66,68 @@ using Ring = spsc::Ring<T, N>;
 // ============================================================================
 // Pipeline geometry / config
 // ============================================================================
-constexpr uint32_t IMAGE_W      = 300;
-constexpr uint32_t IMAGE_H      = 300;
-constexpr std::size_t FRAME_BYTES = std::size_t(IMAGE_W) * IMAGE_H * 2; // uint16
-constexpr uint32_t SLABS        = 128;
-constexpr int      FPS = 1000;  // 1 kFPS target
-constexpr int      FRAME_PERIOD_US = 1000000 / FPS;
-constexpr uint32_t NTH_ARCHIVE  = 10;        // every 10th frame archived
+constexpr uint32_t IMAGE_W        = 300;
+constexpr uint32_t IMAGE_H        = 300;
+constexpr std::size_t FRAME_BYTES = std::size_t(IMAGE_W) * IMAGE_H * 2;
+constexpr uint32_t SLABS          = 128;
+constexpr int      FPS            = 1000;      // 1 kFPS target
+constexpr int      FRAME_PERIOD   = 1000000 / FPS;
+constexpr uint32_t NTH_ARCHIVE    = 10;        // every 10th frame archived
+constexpr bool     DRAIN_QUEUES   = false;   // drain queues after processing
+
+// ============================================================================
+// ROI grid configuration
+// ============================================================================
+constexpr uint32_t  ROW_START     = 50;     // start row of ROI grid
+constexpr uint32_t  COL_START     = 50;     // start column of ROI grid
+constexpr uint32_t  ROW_END       = 250;    // end row of ROI grid
+constexpr uint32_t  COL_END       = 250;    // end column of ROI grid
+constexpr uint32_t  ROI_W         = 10;     // ROI width
+constexpr uint32_t  ROI_H         = 10;     // ROI height
+constexpr double    LAMBDA_OCC    = 10.0;   // Poisson distribution for occupied ROI
+constexpr double    LAMBDA_EMPTY  = 0.5;    // Poisson distribution for empty ROI
+constexpr double    FP_TARGET     = 1e-3;   // False positive rate
+constexpr int       MAX_K         = 100;    // Maximum scan range
+
+// ============================================================================
+// SPSC queue configuration
+// ============================================================================
+constexpr uint32_t  PROC_Q_SIZE = 1024;
+constexpr uint32_t  ARCH_Q_SIZE = 1024;
+
+// ============================================================================
+// DMA source configuration
+// The DMA source will pace the frames to the rate. If the rate is not paced
+// then the frames will be delivered as fast as possible.
+// ============================================================================
+constexpr bool      PACE_FRAMES   = true;
+constexpr int       CPU_AFFINITY  = -1;     // no pinning
+constexpr int       THREAD_NICE   = 0;      // no niceness
+constexpr bool      LOOP_FRAMES   = true;   // loop through frames
+
+// ============================================================================
+// Processor configuration
+// ============================================================================
+constexpr uint32_t  WORKER_THREADS = 4;   // adjust per CPU
+constexpr bool      PRINT_STDOUT   = false;
+constexpr uint64_t  INTERVAL_PRINT = 37;  // Set some random prime number for interval printing
+
+const std::string_view PROC_OUTPUT_DIR    = "PROC_out";
+
+// ============================================================================
+// Archiver configuration
+// ============================================================================
+constexpr uint64_t    SEGMENT_BYTES   = 4ull * 1024 * 1024 * 1024; // 4 GiB segments
+constexpr uint64_t    IO_BUFFER_BYTES = 8ull * 1024 * 1024;
+constexpr bool        MAKE_INDEX      = true;
+constexpr bool        USE_IO_URING    = false;   // set true on Linux with io_uring if desired
+constexpr bool        DIRECT_IO       = false;   // open with O_DIRECT (requires aligned writes)
+constexpr unsigned    URING_QD        = 64;      // SQ/CQ depth
+constexpr unsigned    MAX_INFLIGHT    = 32;      // cap in-flight write requests
+constexpr std::size_t BLOCK_BYTES     = 4096;    // alignment & size multiple when using O_DIRECT
+
+const std::string_view ARCH_OUTPUT_DIR    = "ARCH_out";
+const std::string_view ARCH_OUTPUT_PREFIX = "frames";
 
 // ============================================================================
 // Helpers to manage bits and slab reclamation
@@ -134,7 +200,7 @@ load_npy_frames(const std::string& dir) {
     storage.emplace_back(std::move(buf));
   }
 
-  std::printf("Loaded %zu frames from %s\n", storage.size(), dir.c_str());
+  std::printf("DRIVER: Loaded %zu frames from %s\n", storage.size(), dir.c_str());
   return storage;
 }
 
@@ -142,11 +208,9 @@ load_npy_frames(const std::string& dir) {
 // Build a grid of ROIs and assign Poisson thresholds
 // The template parameters are the start and end coordinates of the ROI grid.
 // ============================================================================
-template<int ROW_START, int COL_START, int ROW_END, int COL_END>
+template<uint32_t ROW_START, uint32_t COL_START, 
+         uint32_t ROW_END, uint32_t COL_END>
 static std::vector<ROI> build_rois_with_poisson() {
-
-  constexpr int ROI_W = 10;
-  constexpr int ROI_H = 10;
 
   std::vector<ROI> rois;
   for (int y = ROW_START; y + ROI_H <= ROW_END; y += ROI_H) {
@@ -156,17 +220,17 @@ static std::vector<ROI> build_rois_with_poisson() {
       rois.emplace_back(r);
     }
   }
-  printf("Built %zu ROIs\n", rois.size());
+  printf("ROI: Built %zu ROIs\n", rois.size());
 
-  const double lambda_occ   = 10.0;   // photons when occupied
-  const double lambda_empty = 0.5;    // effective noise photons when empty
-  const double fp_target    = 1e-3;   // max false positive rate
-  const int    max_k        = 100;    // scan range
+  constexpr double lambda_occ   = LAMBDA_OCC;
+  constexpr double lambda_empty = LAMBDA_EMPTY;
+  constexpr double fp_target    = FP_TARGET;
+  constexpr int    max_k        = MAX_K;
 
   pipeline::PoissonDetector det(lambda_occ, lambda_empty, fp_target, max_k);
   const int T = det.threshold();
 
-  std::printf("PoissonDetector threshold T = %d "
+  std::printf("ROI: PoissonDetector threshold T = %d "
               "(FP=%.3e, FN=%.3e)\n",
               T,
               det.false_positive_rate(),
@@ -176,7 +240,7 @@ static std::vector<ROI> build_rois_with_poisson() {
     r.threshold = static_cast<std::uint32_t>(T);
   }
 
-  std::printf("Configured %zu ROIs of size %dx%d\n",
+  std::printf("ROI: Configured %zu ROIs of size %dx%d\n",
               rois.size(), ROI_W, ROI_H);
   return rois;
 }
@@ -217,8 +281,8 @@ int main(int argc, char** argv) {
     // ========================================================================
     SlabPool pool(SLABS, FRAME_BYTES, /*alignment*/4096);
 
-    Ring<Desc, 1024> proc_q;
-    Ring<Desc, 1024> arch_q;
+    Ring<Desc, PROC_Q_SIZE> proc_q;
+    Ring<Desc, ARCH_Q_SIZE> arch_q;
 
     PipelineMetrics metrics;
 
@@ -226,14 +290,14 @@ int main(int argc, char** argv) {
     // DMA source configuration and callbacks
     // ========================================================================
     DmaConfig dcfg;
-    dcfg.paced           = true;
-    dcfg.frame_period_us = FRAME_PERIOD_US;
+    dcfg.paced           = PACE_FRAMES;
+    dcfg.frame_period_us = FRAME_PERIOD;
     dcfg.expected_w      = IMAGE_W;
     dcfg.expected_h      = IMAGE_H;
     dcfg.nth_archive     = NTH_ARCHIVE;
-    dcfg.cpu_affinity    = -1;  // no pin
-    dcfg.thread_nice     = 0;
-    dcfg.loop_frames     = false;
+    dcfg.cpu_affinity    = CPU_AFFINITY;
+    dcfg.thread_nice     = THREAD_NICE;
+    dcfg.loop_frames     = LOOP_FRAMES;
 
     /// on_proc: push into proc_q; if full, drop and clear PROC bit
     pipeline::ProcCallback on_proc = [&](const Desc& d){
@@ -243,7 +307,7 @@ int main(int argc, char** argv) {
         release_proc(pool, d);
       }
     };
-
+    
     /// on_arch: push into arch_q; if full, drop and clear ARCH bit
     pipeline::ArchCallback on_arch = [&](const Desc& d){
       metrics.mark_dma_arch_offered();
@@ -257,15 +321,35 @@ int main(int argc, char** argv) {
     dma.set_frames(std::move(frames));
 
     // ========================================================================
+    // Generate timestamp once for both Archiver and Processor
+    // ========================================================================
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm_buf;
+#if defined(_WIN32) || defined(_WIN64)
+    localtime_s(&tm_buf, &now_time_t);
+    std::tm* now_tm = &tm_buf;
+#else
+    localtime_r(&now_time_t, &tm_buf);
+    std::tm* now_tm = &tm_buf;
+#endif
+    char timestamp_str[64];
+    std::strftime(timestamp_str, sizeof(timestamp_str), "%Y%m%d_%H%M%S", now_tm);
+
+    // ========================================================================
     // Archiver setup
     // ========================================================================
+    // Create timestamped subdirectory path for archiver
+    std::filesystem::path archdir_path 
+      = std::filesystem::path(ARCH_OUTPUT_DIR) / timestamp_str;
+    
     ArchiverConfig acfg;
-    acfg.output_dir      = "archive_out";
-    acfg.file_prefix     = "frames";
-    acfg.segment_bytes   = 4ull * 1024 * 1024 * 1024; // 4 GiB segments
-    acfg.io_buffer_bytes = 8ull * 1024 * 1024;
-    acfg.make_index      = true;
-    acfg.use_io_uring    = false; // set true on Linux with io_uring if desired
+    acfg.output_dir      = archdir_path.string();
+    acfg.file_prefix     = std::string(ARCH_OUTPUT_PREFIX);
+    acfg.segment_bytes   = SEGMENT_BYTES;
+    acfg.io_buffer_bytes = IO_BUFFER_BYTES;
+    acfg.make_index      = MAKE_INDEX;
+    acfg.use_io_uring    = USE_IO_URING;
 
     pipeline::PopFn arch_pop = [&](Desc& d) -> bool {
       return arch_q.pop(d);
@@ -277,65 +361,44 @@ int main(int argc, char** argv) {
     // Processor setup (ROIs + AVX worker pool)
     // ========================================================================
     
-    constexpr int ROW_START = 50;
-    constexpr int COL_START = 50;
-    constexpr int ROW_END = 250;
-    constexpr int COL_END = 250;
-    auto rois = build_rois_with_poisson<ROW_START, COL_START, ROW_END, COL_END>();
+    auto rois = build_rois_with_poisson<ROW_START, COL_START, 
+                                        ROW_END, COL_END>();
 
     pipeline::PopFn proc_pop = [&](Desc& d) -> bool {
       return proc_q.pop(d);
     };
 
-    std::uint64_t interval{37};
-    pipeline::ResultCallback on_result =
-      [&](std::uint64_t seq,
-          const std::vector<std::uint64_t>& sums,
-          const std::vector<std::uint8_t>& occ) -> bool {
-        (void)sums;
-        /// (void)occ;
+    // Create timestamped result file path for processor
+    char result_name[128];
+    std::snprintf(result_name, sizeof(result_name), "results_%s.txt", timestamp_str);
+    std::filesystem::path result_path 
+      = std::filesystem::path(PROC_OUTPUT_DIR) / result_name;
 
-        // Print all frames in non-looping mode, or every Nth frame in looping mode
-        if (!dcfg.loop_frames || (seq % interval) == 0ull) {
-          std::printf("[frame %llu] rois=%zu\n",
-                      (unsigned long long)seq, rois.size());
-
-          // Print the sums vector
-          // std::printf("sums: [");
-          // for (size_t i = 0; i < sums.size(); ++i) {
-          //   std::printf("%llu", static_cast<unsigned long long>(sums[i]));
-          //   if (i + 1 < sums.size()) std::printf(", ");
-          // }
-          // std::printf("\n");
-          // std::printf("]\n");
-
-          // Print the occ vector
-          //std::printf("occ:  [");
-          for (size_t i = 0; i < occ.size(); ++i) {
-            std::printf("%u", static_cast<unsigned int>(occ[i]));
-            ///if (i + 1 < occ.size()) std::printf(", ");
-          }
-          std::printf("\n");
-          //std::printf("]\n");
-        }
-
-
-
-        return true;
-      };
+    /// On result callback (empty - Processor will write to file if configured)
+    pipeline::ResultCallback on_result = nullptr;
 
     ProcessorConfig pcfg;
     pcfg.image_w        = IMAGE_W;
     pcfg.image_h        = IMAGE_H;
-    pcfg.worker_threads = 4;   // adjust per CPU
-    pcfg.print_stdout   = false;
+    pcfg.worker_threads = WORKER_THREADS;
+    pcfg.print_stdout   = PRINT_STDOUT;
+    pcfg.interval_print = INTERVAL_PRINT;
+    pcfg.output_file_path = result_path.string();  // Processor will create dir and file
 
     Processor proc(pool, pcfg, proc_pop, rois, on_result);
 
     // ========================================================================
     // Run pipeline
     // ========================================================================
-    std::puts("Starting pipeline...");
+    std::puts("DRIVER: Starting pipeline...");
+    if (PACE_FRAMES) {
+      std::puts("DRIVER: Pacing frames is enabled");
+      std::printf("DRIVER: Pacing frames to %d FPS\n", FPS);
+    } else {
+      std::puts("DRIVER: Pacing frames is disabled");
+      std::puts("DRIVER: Frames will be delivered as fast as possible");
+    }
+
     auto t0 = std::chrono::steady_clock::now();
 
     arch.start();
@@ -345,7 +408,7 @@ int main(int argc, char** argv) {
       // Original behavior: fixed time run
       std::this_thread::sleep_for(std::chrono::duration<double>(run_seconds));
     } else {
-      printf("Waiting for DMA and PROC to finish...\n");
+      printf("DRIVER: Waiting for DMA and PROC to finish...\n");
       while (true) {
         auto dma_done = dma.stats().produced.load();
         auto proc_done = proc.stats().frames.load();
@@ -354,8 +417,20 @@ int main(int argc, char** argv) {
       }
     }
 
-    std::puts("Stopping pipeline...");
+    std::puts("DRIVER: Stopping pipeline...");
     dma.stop();
+    
+    // If DRAIN_QUEUES is true, wait for queues to drain so all frames are 
+    // processed. Otherwise, the pipeline will stop when the DMA is terminated.
+    /// This might cause some frames to be dropped by the PROC or ARCH.
+    if (DRAIN_QUEUES) {
+      printf("DRIVER: Waiting for queues to drain...\n");
+      while (!proc_q.empty() || !arch_q.empty()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    
     proc.stop();
     arch.stop();
 
@@ -369,39 +444,21 @@ int main(int argc, char** argv) {
     const auto& ds  = dma.stats();
     const auto& ps  = proc.stats();
     const auto& as  = arch.stats();
-    //const auto  snap = metrics.snapshot();
 
-    std::printf("\n=== Component Stats ===\n");
-    std::printf("DMA:    produced=%llu  archived_offered=%llu  pool_exhaust=%llu\n",
-                (unsigned long long)ds.produced.load(),
-                (unsigned long long)ds.archived_offered.load(),
-                (unsigned long long)ds.pool_exhaust.load());
-    std::printf("PROC:   frames=%llu  stale_desc=%llu  empty_polls=%llu\n",
-                (unsigned long long)ps.frames.load(),
-                (unsigned long long)ps.stale_desc.load(),
-                (unsigned long long)ps.empty_polls.load());
-    std::printf("ARCH:   frames=%llu  bytes=%llu  rotations=%llu  stale_desc=%llu  io_errors=%llu\n",
-                (unsigned long long)as.archived_frames.load(),
-                (unsigned long long)as.archived_bytes.load(),
-                (unsigned long long)as.rotations.load(),
-                (unsigned long long)as.stale_desc.load(),
-                (unsigned long long)as.io_errors.load());
+    // Sync metrics from component stats
+    metrics.mark_dma_pool_exhaust(ds.pool_exhaust.load());
+    metrics.mark_proc_frame(ps.frames.load());
+    metrics.mark_proc_stale_desc(ps.stale_desc.load());
+    metrics.mark_proc_empty_polls(ps.empty_polls.load());
+    metrics.mark_arch_frame(as.archived_frames.load());
+    metrics.mark_arch_bytes(as.archived_bytes.load());
+    metrics.mark_arch_rotation(as.rotations.load());
+    metrics.mark_arch_stale_desc(as.stale_desc.load());
+    metrics.mark_arch_io_error(as.io_errors.load());
 
-    std::printf("\n=== End-to-end throughput ===\n");
-    double dma_fps   = ds.produced.load() / dt;
-    double proc_fps  = ps.frames.load()   / dt;
-    double arch_fps  = as.archived_frames.load() / dt;
-    double arch_gbps = (as.archived_bytes.load() / dt) / 1e9;
-    double arch_gibps= (as.archived_bytes.load() / dt) / (1024.0*1024.0*1024.0);
-
-    std::printf("Elapsed: %.3f s\n", dt);
-    std::printf("DMA:     %.1f fps\n", dma_fps);
-    std::printf("PROC:    %.1f fps\n", proc_fps);
-    std::printf("ARCH:    %.1f fps | %.3f GB/s (%.3f GiB/s)\n",
-                arch_fps, arch_gbps, arch_gibps);
-
-    //std::printf("\n=== PipelineMetrics snapshot ===\n");
-    //metrics.print(stdout);
+    // Print unified metrics
+    std::printf("\n");
+    metrics.print(stdout);
 
     /// Sanity: slabs back in pool
     std::vector<std::uint32_t> ids;
@@ -414,10 +471,10 @@ int main(int argc, char** argv) {
     EXPECT_TRUE(pool.acquire() == UINT32_MAX);
     for (auto id : ids) pool.release(id);
 
-    std::puts("\nPipeline run completed OK.");
+    std::puts("\nDRIVER: Pipeline run completed OK.");
     return 0;
   } catch (const std::exception& ex) {
-    std::fprintf(stderr, "FATAL: %s\n", ex.what());
+    std::fprintf(stderr, "DRIVER: FATAL: %s\n", ex.what());
     return 1;
   }
 }
