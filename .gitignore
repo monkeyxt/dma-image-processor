@@ -39,3 +39,26 @@
 
 # debug information files
 *.dwo
+
+# ccls cache
+.ccls
+.ccls-cache
+.clangd
+.cache/
+compile_commands.json
+
+# build files
+build/
+bin/
+CMakeCache.txt
+CMakeFiles/
+CMakeLists.txt.user
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+
+# vscode files
+.vscode/
+
+#images
+images/png/
