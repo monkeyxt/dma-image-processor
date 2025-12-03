@@ -95,8 +95,13 @@ struct DmaSource::Impl {
       }
 
       /// Next frame
-      i = (i + 1) % frames.size();
       ++seq;
+      if (cfg.loop_frames) [[likely]] {
+        i = (i + 1) % frames.size();
+      } else [[unlikely]] {
+        ++i;
+        if (i >= frames.size()) { break; }
+      }
 
       /// Pause for the next frame if paced is true.
       if (cfg.paced) { next += period; std::this_thread::sleep_until(next); }

@@ -297,35 +297,35 @@ src/cnpy.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/dma-image-processor.dir/build.make CMakeFiles/dma-image-processor.dir/src/cnpy.cpp.s
 .PHONY : src/cnpy.cpp.s
 
-src/dma_souce.o: src/dma_souce.cpp.o
+src/dma_source.o: src/dma_source.cpp.o
 
-.PHONY : src/dma_souce.o
+.PHONY : src/dma_source.o
 
 # target to build an object file
-src/dma_souce.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_dma_source.dir/build.make CMakeFiles/test_dma_source.dir/src/dma_souce.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/dma-image-processor.dir/build.make CMakeFiles/dma-image-processor.dir/src/dma_souce.cpp.o
-.PHONY : src/dma_souce.cpp.o
+src/dma_source.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_dma_source.dir/build.make CMakeFiles/test_dma_source.dir/src/dma_source.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dma-image-processor.dir/build.make CMakeFiles/dma-image-processor.dir/src/dma_source.cpp.o
+.PHONY : src/dma_source.cpp.o
 
-src/dma_souce.i: src/dma_souce.cpp.i
+src/dma_source.i: src/dma_source.cpp.i
 
-.PHONY : src/dma_souce.i
+.PHONY : src/dma_source.i
 
 # target to preprocess a source file
-src/dma_souce.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_dma_source.dir/build.make CMakeFiles/test_dma_source.dir/src/dma_souce.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/dma-image-processor.dir/build.make CMakeFiles/dma-image-processor.dir/src/dma_souce.cpp.i
-.PHONY : src/dma_souce.cpp.i
+src/dma_source.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_dma_source.dir/build.make CMakeFiles/test_dma_source.dir/src/dma_source.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dma-image-processor.dir/build.make CMakeFiles/dma-image-processor.dir/src/dma_source.cpp.i
+.PHONY : src/dma_source.cpp.i
 
-src/dma_souce.s: src/dma_souce.cpp.s
+src/dma_source.s: src/dma_source.cpp.s
 
-.PHONY : src/dma_souce.s
+.PHONY : src/dma_source.s
 
 # target to generate assembly for a file
-src/dma_souce.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_dma_source.dir/build.make CMakeFiles/test_dma_source.dir/src/dma_souce.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/dma-image-processor.dir/build.make CMakeFiles/dma-image-processor.dir/src/dma_souce.cpp.s
-.PHONY : src/dma_souce.cpp.s
+src/dma_source.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_dma_source.dir/build.make CMakeFiles/test_dma_source.dir/src/dma_source.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dma-image-processor.dir/build.make CMakeFiles/dma-image-processor.dir/src/dma_source.cpp.s
+.PHONY : src/dma_source.cpp.s
 
 src/driver.o: src/driver.cpp.o
 
@@ -595,9 +595,9 @@ help:
 	@echo "... src/cnpy.o"
 	@echo "... src/cnpy.i"
 	@echo "... src/cnpy.s"
-	@echo "... src/dma_souce.o"
-	@echo "... src/dma_souce.i"
-	@echo "... src/dma_souce.s"
+	@echo "... src/dma_source.o"
+	@echo "... src/dma_source.i"
+	@echo "... src/dma_source.s"
 	@echo "... src/driver.o"
 	@echo "... src/driver.i"
 	@echo "... src/driver.s"

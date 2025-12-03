@@ -34,6 +34,7 @@ struct DmaConfig {
   uint32_t nth_archive     { 0 };        // 0 = disable arch publishing
   uint32_t expected_w      { 4096 };
   uint32_t expected_h      { 256  };
+  bool     loop_frames     { true };     // if true, loop through frames; if false, stop at end
 };
 
 using ProcCallback = std::function<void(const slab::Desc&)>;
@@ -77,6 +78,10 @@ public:
   /// Set the nth archive.
   /// @param n the nth archive to archive.
   void set_nth_archive(uint32_t n);
+
+  /// Set whether to loop through frames.
+  /// @param loop If true, continuously loop through frames; if false, stop at end.
+  void set_loop_frames(bool loop);
 
   struct Stats {
     std::atomic<uint64_t> produced{0};

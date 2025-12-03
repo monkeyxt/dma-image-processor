@@ -210,6 +210,7 @@ int main(int argc, char** argv) {
     for (auto& v : storage) {
       frames.emplace_back(v.data(), v.size());
     }
+    const size_t n_frames = frames.size();
 
     // ========================================================================
     // Core resources: slab pool and queues
@@ -232,6 +233,7 @@ int main(int argc, char** argv) {
     dcfg.nth_archive     = NTH_ARCHIVE;
     dcfg.cpu_affinity    = -1;  // no pin
     dcfg.thread_nice     = 0;
+    dcfg.loop_frames     = false;
 
     /// on_proc: push into proc_q; if full, drop and clear PROC bit
     pipeline::ProcCallback on_proc = [&](const Desc& d){
@@ -293,7 +295,8 @@ int main(int argc, char** argv) {
         (void)sums;
         /// (void)occ;
 
-        if ((seq % interval) == 0ull) {
+        // Print all frames in non-looping mode, or every Nth frame in looping mode
+        if (!dcfg.loop_frames || (seq % interval) == 0ull) {
           std::printf("[frame %llu] rois=%zu\n",
                       (unsigned long long)seq, rois.size());
 
@@ -338,8 +341,18 @@ int main(int argc, char** argv) {
     arch.start();
     proc.start();
     dma.start();
-
-    std::this_thread::sleep_for(std::chrono::duration<double>(run_seconds));
+    if (dcfg.loop_frames) {
+      // Original behavior: fixed time run
+      std::this_thread::sleep_for(std::chrono::duration<double>(run_seconds));
+    } else {
+      printf("Waiting for DMA and PROC to finish...\n");
+      while (true) {
+        auto dma_done = dma.stats().produced.load();
+        auto proc_done = proc.stats().frames.load();
+        if (dma_done >= n_frames && proc_done >= n_frames) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+    }
 
     std::puts("Stopping pipeline...");
     dma.stop();
