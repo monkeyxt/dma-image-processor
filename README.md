@@ -18,6 +18,8 @@ cmake ..
 make
 ./bin/dma-image-processor <npy_dir> [run_seconds] [--config config.toml]
 ```
+The `<npy_dir>` specifies where the input images are. The `--config` flag specifies the location of the config file. If no config file is specified, default configurations will be used.
+See the `config/README.md` about what each config parameter does and also `config/default.toml` which gives the default params for the program. 
 
 To build without tests:
 ```
