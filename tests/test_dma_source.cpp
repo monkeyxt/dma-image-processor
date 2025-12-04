@@ -13,7 +13,7 @@
 
 #include "slab_pool.hpp"
 #include "dma_source.hpp"
-#include "cnpy.hpp"
+#include <cnpy.h>
 
 #define EXPECT_TRUE(x) do{ \
   if(!(x)){ \

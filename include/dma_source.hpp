@@ -16,7 +16,7 @@
 #include <vector>
 
 #include "slab_pool.hpp"   // For slab::SlabPool, slab::Desc
-#include "cnpy.hpp"        // For cnpy::NpyArray
+#include <cnpy.h>          // For cnpy::NpyArray (from FetchContent subproject)
 
 using cnpy::NpyArray;
 

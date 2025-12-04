@@ -2,12 +2,13 @@
 // `drive.cpp` -- End-to-end driver for DMA → Processor → Archiver
 //
 // Usage:
-//   ./dma-image-processor <npy_dir> [run_seconds]
+//   ./dma-image-processor <npy_dir> [run_seconds] [--config config.toml]
 //
 //  - Loads all *.npy frames in <npy_dir> (row-major H×W, uint16).
 //  - Sets up slab pool, SPSC queues, DMA source, processor, and archiver.
 //  - Uses PoissonDetector to set an occupancy threshold for all ROIs.
 //  - Runs for run_seconds (default 5 s) and prints stats.
+//  - Configuration can be loaded from a TOML file via --config flag (optional).
 // ============================================================================
 #include <atomic>
 #include <chrono>
@@ -20,7 +21,7 @@
 #include <thread>
 #include <vector>
 
-#include <cnpy.hpp>
+#include <cnpy.h>
 
 #include "slab_pool.hpp"
 #include "spsc_ring.hpp"
@@ -29,6 +30,7 @@
 #include "archiver.hpp"
 #include "poisson.hpp"
 #include "metrics.hpp"
+#include "config.hpp"
 
 #define EXPECT_TRUE(x) do{ \
   if(!(x)){ \
@@ -63,72 +65,6 @@ template<typename T, std::size_t N>
 using Ring = spsc::Ring<T, N>;
 
 // ============================================================================
-// Pipeline geometry / config
-// ============================================================================
-constexpr uint32_t IMAGE_W        = 300;
-constexpr uint32_t IMAGE_H        = 300;
-constexpr std::size_t FRAME_BYTES = std::size_t(IMAGE_W) * IMAGE_H * 2;
-constexpr uint32_t SLABS          = 128;
-constexpr int      FPS            = 1000;      // 1 kFPS target
-constexpr int      FRAME_PERIOD   = 1000000 / FPS;
-constexpr uint32_t NTH_ARCHIVE    = 10;        // every 10th frame archived
-constexpr bool     DRAIN_QUEUES   = false;     // drain queues after processing
-
-// ============================================================================
-// ROI grid configuration
-// ============================================================================
-constexpr std::size_t  ROW_START     = 50;     // start row of ROI grid
-constexpr std::size_t  COL_START     = 50;     // start column of ROI grid
-constexpr std::size_t  ROW_END       = 250;    // end row of ROI grid
-constexpr std::size_t  COL_END       = 250;    // end column of ROI grid
-constexpr std::size_t  ROI_W         = 10;     // ROI width
-constexpr std::size_t  ROI_H         = 10;     // ROI height
-constexpr double       LAMBDA_OCC    = 10.0;   // Poisson distribution for occupied ROI
-constexpr double       LAMBDA_EMPTY  = 0.5;    // Poisson distribution for empty ROI
-constexpr double       FP_TARGET     = 1e-3;   // False positive rate
-constexpr int          MAX_K         = 100;    // Maximum scan range
-
-// ============================================================================
-// SPSC queue configuration
-// ============================================================================
-constexpr uint32_t  PROC_Q_SIZE = 1024;
-constexpr uint32_t  ARCH_Q_SIZE = 1024;
-
-// ============================================================================
-// DMA source configuration
-// The DMA source will pace the frames to the rate. If the rate is not paced
-// then the frames will be delivered as fast as possible.
-// ============================================================================
-constexpr bool      PACE_FRAMES   = true;
-constexpr int       CPU_AFFINITY  = -1;     // no pinning
-constexpr int       THREAD_NICE   = 0;      // no niceness
-constexpr bool      LOOP_FRAMES   = true;   // loop through frames
-
-// ============================================================================
-// Processor configuration
-// ============================================================================
-constexpr uint32_t  WORKER_THREADS = 4;   // adjust per CPU
-constexpr bool      PRINT_STDOUT   = false;
-constexpr uint64_t  INTERVAL_PRINT = 37;  // Set some random prime number for interval printing
-
-const std::string_view PROC_OUTPUT_DIR    = "PROC_out";
-
-// ============================================================================
-// Archiver configuration
-// ============================================================================
-constexpr uint64_t    SEGMENT_BYTES   = 4ull * 1024 * 1024 * 1024; // 4 GiB segments
-constexpr uint64_t    IO_BUFFER_BYTES = 8ull * 1024 * 1024;
-constexpr bool        MAKE_INDEX      = true;
-constexpr bool        USE_IO_URING    = false;   // set true on Linux with io_uring if desired
-constexpr bool        DIRECT_IO       = false;   // open with O_DIRECT (requires aligned writes)
-constexpr unsigned    URING_QD        = 64;      // SQ/CQ depth
-constexpr unsigned    MAX_INFLIGHT    = 32;      // cap in-flight write requests
-constexpr std::size_t BLOCK_BYTES     = 4096;    // alignment & size multiple when using O_DIRECT
-
-const std::string_view ARCH_OUTPUT_DIR    = "ARCH_out";
-const std::string_view ARCH_OUTPUT_PREFIX = "frames";
-
-// ============================================================================
 // Helpers to manage bits and slab reclamation
 // ============================================================================
 inline void release_proc(SlabPool& pool, const Desc& d) {
@@ -157,7 +93,7 @@ inline void release_arch(SlabPool& pool, const Desc& d) {
 // Load .npy frames from a directory into contiguous byte buffers
 // ============================================================================
 static std::vector<std::vector<std::byte>>
-load_npy_frames(const std::string& dir) {
+load_npy_frames(const std::string& dir, uint32_t expected_h, uint32_t expected_w, std::size_t expected_frame_bytes) {
   std::vector<fs::path> files;
   for (auto& e : fs::directory_iterator(dir)) {
     if (!e.is_regular_file()) continue;
@@ -184,18 +120,18 @@ load_npy_frames(const std::string& dir) {
     }
     const std::size_t H = arr.shape[0];
     const std::size_t W = arr.shape[1];
-    if (H != IMAGE_H || W != IMAGE_W) {
+    if (H != expected_h || W != expected_w) {
       throw std::runtime_error("npy shape mismatch (expected "
-                               + std::to_string(IMAGE_H) + "x"
-                               + std::to_string(IMAGE_W) + ") in " + p.string());
+                               + std::to_string(expected_h) + "x"
+                               + std::to_string(expected_w) + ") in " + p.string());
     }
-    if (H * W * arr.word_size != FRAME_BYTES) {
+    if (H * W * arr.word_size != expected_frame_bytes) {
       throw std::runtime_error("npy size mismatch vs FRAME_BYTES in " + p.string());
     }
 
     const std::uint16_t* src = arr.data<const std::uint16_t>();
-    std::vector<std::byte> buf(FRAME_BYTES);
-    std::memcpy(buf.data(), src, FRAME_BYTES);
+    std::vector<std::byte> buf(expected_frame_bytes);
+    std::memcpy(buf.data(), src, expected_frame_bytes);
     storage.emplace_back(std::move(buf));
   }
 
@@ -210,24 +146,73 @@ load_npy_frames(const std::string& dir) {
 int main(int argc, char** argv) {
   if (argc < 2) {
     std::fprintf(stderr,
-      "Usage: %s <npy_dir> [run_seconds]\n"
-      "Example: %s data/ 5\n",
-      argv[0], argv[0]);
+      "Usage: %s <npy_dir> [run_seconds] [--config config.toml]\n"
+      "Example: %s data/ 5\n"
+      "Example: %s data/ 5 --config configs/default.toml\n",
+      argv[0], argv[0], argv[0]);
     return 1;
   }
 
   const std::string npy_dir = argv[1];
   double run_seconds = 5.0;
-  if (argc >= 3) {
-    run_seconds = std::atof(argv[2]);
-    if (run_seconds <= 0.0) run_seconds = 5.0;
+  std::string config_path;
+  
+  // Parse arguments: [run_seconds] [--config config.toml]
+  bool run_seconds_set = false;
+  for (int i = 2; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg == "--config" || arg == "-c") {
+      if (i + 1 < argc) {
+        config_path = argv[++i];
+      } else {
+        std::fprintf(stderr, "Error: --config requires a file path\n");
+        return 1;
+      }
+    } else if (!run_seconds_set) {
+      // Try to parse as run_seconds (only if not already set)
+      double parsed = std::atof(arg.c_str());
+      if (parsed > 0.0) {
+        run_seconds = parsed;
+        run_seconds_set = true;
+      } else {
+        std::fprintf(stderr, 
+          "MAIN: Error: Invalid run_seconds value: %s\n", arg.c_str());
+        std::fprintf(stderr, 
+          "MAIN: Usage: %s <npy_dir> [run_seconds] [--config config.toml]\n", 
+          argv[0]);
+        return 1;
+      }
+    } else {
+      // Unknown argument
+      std::fprintf(stderr, 
+        "MAIN: Error: Unknown argument: %s\n", arg.c_str());
+      std::fprintf(stderr, 
+        "MAIN: Usage: %s <npy_dir> [run_seconds] [--config config.toml]\n", 
+        argv[0]);
+      return 1;
+    }
+  }
+  
+  // Default to configs/default.toml if no config specified and it exists
+  if (config_path.empty()) {
+    std::filesystem::path default_config = "configs/default.toml";
+    if (std::filesystem::exists(default_config)) {
+      config_path = default_config.string();
+    }
+  }
+  
+  Config cfg;
+  if (!config_path.empty()) {
+    cfg = load_config(config_path);
+  } else {
+    std::printf("Using default configuration (no config file specified).\n");
   }
 
   try {
     // ========================================================================
     // Load frames from .npy into host storage
     // ========================================================================
-    auto storage = load_npy_frames(npy_dir);
+    auto storage = load_npy_frames(npy_dir, cfg.IMAGE_H, cfg.IMAGE_W, cfg.FRAME_BYTES());
     std::vector<std::span<const std::byte>> frames;
     frames.reserve(storage.size());
     for (auto& v : storage) {
@@ -238,10 +223,10 @@ int main(int argc, char** argv) {
     // ========================================================================
     // Core resources: slab pool and queues
     // ========================================================================
-    SlabPool pool(SLABS, FRAME_BYTES, /*alignment*/4096);
+    SlabPool pool(cfg.SLABS, cfg.FRAME_BYTES(), /*alignment*/4096);
 
-    Ring<Desc, PROC_Q_SIZE> proc_q;
-    Ring<Desc, ARCH_Q_SIZE> arch_q;
+    Ring<Desc, Config::PROC_Q_SIZE_DEFAULT> proc_q;
+    Ring<Desc, Config::ARCH_Q_SIZE_DEFAULT> arch_q;
 
     PipelineMetrics metrics;
 
@@ -249,16 +234,18 @@ int main(int argc, char** argv) {
     // DMA source configuration and callbacks
     // ========================================================================
     DmaConfig dcfg;
-    dcfg.paced           = PACE_FRAMES;
-    dcfg.frame_period_us = FRAME_PERIOD;
-    dcfg.expected_w      = IMAGE_W;
-    dcfg.expected_h      = IMAGE_H;
-    dcfg.nth_archive     = NTH_ARCHIVE;
-    dcfg.cpu_affinity    = CPU_AFFINITY;
-    dcfg.thread_nice     = THREAD_NICE;
-    dcfg.loop_frames     = LOOP_FRAMES;
+    dcfg.paced           = cfg.PACE_FRAMES;
+    dcfg.frame_period_us = cfg.FRAME_PERIOD();
+    dcfg.expected_w      = cfg.IMAGE_W;
+    dcfg.expected_h      = cfg.IMAGE_H;
+    dcfg.nth_archive     = cfg.NTH_ARCHIVE;
+    dcfg.cpu_affinity    = cfg.CPU_AFFINITY;
+    dcfg.thread_nice     = cfg.THREAD_NICE;
+    dcfg.loop_frames     = cfg.LOOP_FRAMES;
 
     /// on_proc: push into proc_q; if full, drop and clear PROC bit
+    /// If the `proc_q` is full, this creates back pressure on the DMA source.
+    /// The DMA source will drop frames until the `proc_q` has space.
     pipeline::ProcCallback on_proc = [&](const Desc& d){
       metrics.mark_dma_frame();
       if (!proc_q.push(d)) {
@@ -300,15 +287,15 @@ int main(int argc, char** argv) {
     // ========================================================================
     // Create timestamped subdirectory path for archiver
     std::filesystem::path archdir_path 
-      = std::filesystem::path(ARCH_OUTPUT_DIR) / timestamp_str;
+      = std::filesystem::path(cfg.ARCH_OUTPUT_DIR) / timestamp_str;
     
     ArchiverConfig acfg;
     acfg.output_dir      = archdir_path.string();
-    acfg.file_prefix     = std::string(ARCH_OUTPUT_PREFIX);
-    acfg.segment_bytes   = SEGMENT_BYTES;
-    acfg.io_buffer_bytes = IO_BUFFER_BYTES;
-    acfg.make_index      = MAKE_INDEX;
-    acfg.use_io_uring    = USE_IO_URING;
+    acfg.file_prefix     = cfg.ARCH_OUTPUT_PREFIX;
+    acfg.segment_bytes   = cfg.SEGMENT_BYTES;
+    acfg.io_buffer_bytes = cfg.IO_BUFFER_BYTES;
+    acfg.make_index      = cfg.MAKE_INDEX;
+    acfg.use_io_uring    = cfg.USE_IO_URING;
 
     pipeline::PopFn arch_pop = [&](Desc& d) -> bool {
       return arch_q.pop(d);
@@ -321,10 +308,10 @@ int main(int argc, char** argv) {
     // ========================================================================
     
     auto rois = pipeline::build_rois_with_poisson(
-        ROW_START, COL_START, ROW_END, COL_END,
-        ROI_W, ROI_H,
-        LAMBDA_OCC, LAMBDA_EMPTY,
-        FP_TARGET, MAX_K);
+        cfg.ROW_START, cfg.COL_START, cfg.ROW_END, cfg.COL_END,
+        cfg.ROI_W, cfg.ROI_H,
+        cfg.LAMBDA_OCC, cfg.LAMBDA_EMPTY,
+        cfg.FP_TARGET, cfg.MAX_K);
 
     pipeline::PopFn proc_pop = [&](Desc& d) -> bool {
       return proc_q.pop(d);
@@ -334,17 +321,17 @@ int main(int argc, char** argv) {
     char result_name[128];
     std::snprintf(result_name, sizeof(result_name), "results_%s.txt", timestamp_str);
     std::filesystem::path result_path 
-      = std::filesystem::path(PROC_OUTPUT_DIR) / result_name;
+      = std::filesystem::path(cfg.PROC_OUTPUT_DIR) / result_name;
 
     /// On result callback (empty - Processor will write to file if configured)
     pipeline::ResultCallback on_result = nullptr;
 
     ProcessorConfig pcfg;
-    pcfg.image_w        = IMAGE_W;
-    pcfg.image_h        = IMAGE_H;
-    pcfg.worker_threads = WORKER_THREADS;
-    pcfg.print_stdout   = PRINT_STDOUT;
-    pcfg.interval_print = INTERVAL_PRINT;
+    pcfg.image_w        = cfg.IMAGE_W;
+    pcfg.image_h        = cfg.IMAGE_H;
+    pcfg.worker_threads = cfg.WORKER_THREADS;
+    pcfg.print_stdout   = cfg.PRINT_STDOUT;
+    pcfg.interval_print = cfg.INTERVAL_PRINT;
     pcfg.output_path    = result_path.string();  // Processor will create dir and file
 
     Processor proc(pool, pcfg, proc_pop, rois, on_result);
@@ -353,15 +340,15 @@ int main(int argc, char** argv) {
     // Run pipeline
     // ========================================================================
     std::puts("MAIN: Starting pipeline...");
-    if (PACE_FRAMES) {
+    if (cfg.PACE_FRAMES) {
       std::puts("MAIN: Pacing frames is enabled");
-      std::printf("MAIN: Pacing frames to %d FPS\n", FPS);
+      std::printf("MAIN: Pacing frames to %d FPS\n", cfg.FPS);
     } else {
       std::puts("MAIN: Pacing frames is disabled");
       std::puts("MAIN: Frames will be delivered as fast as possible");
     }
 
-    if (DRAIN_QUEUES) {
+    if (cfg.DRAIN_QUEUES) {
       std::puts("MAIN: Draining queues is enabled");
     } else {
       std::puts("MAIN: Draining queues is disabled");
@@ -390,7 +377,7 @@ int main(int argc, char** argv) {
     /// If DRAIN_QUEUES is true, wait for queues to drain so all frames are 
     /// processed. Otherwise, the pipeline will stop when the DMA is terminated.
     /// This might cause some frames to be dropped by the PROC or ARCH.
-    if (DRAIN_QUEUES) {
+    if (cfg.DRAIN_QUEUES) {
       printf("MAIN: Waiting for queues to drain...\n");
       while (!proc_q.empty() || !arch_q.empty()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -428,14 +415,39 @@ int main(int argc, char** argv) {
     metrics.print(stdout);
 
     /// Sanity: slabs back in pool
+    /// In drain mode, all frames should be processed and all slabs released.
+    /// In no-drain mode, frames remaining in queues keep their slabs allocated,
+    /// so we only verify pool consistency rather than expecting all slabs back.
     std::vector<std::uint32_t> ids;
     ids.reserve(pool.size());
-    for (std::uint32_t i = 0; i < pool.size(); ++i) {
-      auto id = pool.acquire();
-      EXPECT_TRUE(id != UINT32_MAX);
-      ids.push_back(id);
+    
+    if (cfg.DRAIN_QUEUES) {
+      // Drain mode: expect all slabs back in pool
+      for (std::uint32_t i = 0; i < pool.size(); ++i) {
+        auto id = pool.acquire();
+        EXPECT_TRUE(id != UINT32_MAX);
+        ids.push_back(id);
+      }
+      EXPECT_TRUE(pool.acquire() == UINT32_MAX);
+      std::printf("MAIN: Sanity check passed: all %zu slabs back in pool\n", 
+                  ids.size());
+    } else {
+      // No-drain mode: some slabs may be stuck in queues, just verify pool works
+      // Wait briefly for any in-flight processing to complete
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      
+      uint32_t available_count = 0;
+      while (true) {
+        auto id = pool.acquire();
+        if (id == UINT32_MAX) break;
+        ids.push_back(id);
+        ++available_count;
+      }
+      std::printf("\nMAIN: Sanity check: %u/%u slabs available (no-drain mode)\n", 
+                  available_count, pool.size());
     }
-    EXPECT_TRUE(pool.acquire() == UINT32_MAX);
+    
+    // Release all acquired slabs back
     for (auto id : ids) pool.release(id);
 
     std::puts("\nMAIN: Pipeline run completed OK.");

@@ -180,19 +180,6 @@ test_processor/fast:
 .PHONY : test_processor/fast
 
 #=============================================================================
-# Target rules for targets named test_poisson
-
-# Build rule for target.
-test_poisson: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_poisson
-.PHONY : test_poisson
-
-# fast build rule for target.
-test_poisson/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_poisson.dir/build.make CMakeFiles/test_poisson.dir/build
-.PHONY : test_poisson/fast
-
-#=============================================================================
 # Target rules for targets named test_dma_source
 
 # Build rule for target.
@@ -231,6 +218,59 @@ dma-image-processor/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/dma-image-processor.dir/build.make CMakeFiles/dma-image-processor.dir/build
 .PHONY : dma-image-processor/fast
 
+#=============================================================================
+# Target rules for targets named test_poisson
+
+# Build rule for target.
+test_poisson: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_poisson
+.PHONY : test_poisson
+
+# fast build rule for target.
+test_poisson/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_poisson.dir/build.make CMakeFiles/test_poisson.dir/build
+.PHONY : test_poisson/fast
+
+#=============================================================================
+# Target rules for targets named cnpy
+
+# Build rule for target.
+cnpy: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 cnpy
+.PHONY : cnpy
+
+# fast build rule for target.
+cnpy/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cnpy.dir/build.make CMakeFiles/cnpy.dir/build
+.PHONY : cnpy/fast
+
+_deps/cnpy-src/cnpy.o: _deps/cnpy-src/cnpy.cpp.o
+
+.PHONY : _deps/cnpy-src/cnpy.o
+
+# target to build an object file
+_deps/cnpy-src/cnpy.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cnpy.dir/build.make CMakeFiles/cnpy.dir/_deps/cnpy-src/cnpy.cpp.o
+.PHONY : _deps/cnpy-src/cnpy.cpp.o
+
+_deps/cnpy-src/cnpy.i: _deps/cnpy-src/cnpy.cpp.i
+
+.PHONY : _deps/cnpy-src/cnpy.i
+
+# target to preprocess a source file
+_deps/cnpy-src/cnpy.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cnpy.dir/build.make CMakeFiles/cnpy.dir/_deps/cnpy-src/cnpy.cpp.i
+.PHONY : _deps/cnpy-src/cnpy.cpp.i
+
+_deps/cnpy-src/cnpy.s: _deps/cnpy-src/cnpy.cpp.s
+
+.PHONY : _deps/cnpy-src/cnpy.s
+
+# target to generate assembly for a file
+_deps/cnpy-src/cnpy.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cnpy.dir/build.make CMakeFiles/cnpy.dir/_deps/cnpy-src/cnpy.cpp.s
+.PHONY : _deps/cnpy-src/cnpy.cpp.s
+
 src/archiver.o: src/archiver.cpp.o
 
 .PHONY : src/archiver.o
@@ -261,41 +301,32 @@ src/archiver.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/dma-image-processor.dir/build.make CMakeFiles/dma-image-processor.dir/src/archiver.cpp.s
 .PHONY : src/archiver.cpp.s
 
-src/cnpy.o: src/cnpy.cpp.o
+src/config.o: src/config.cpp.o
 
-.PHONY : src/cnpy.o
+.PHONY : src/config.o
 
 # target to build an object file
-src/cnpy.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_processor.dir/build.make CMakeFiles/test_processor.dir/src/cnpy.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_dma_source.dir/build.make CMakeFiles/test_dma_source.dir/src/cnpy.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_archiver.dir/build.make CMakeFiles/test_archiver.dir/src/cnpy.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/dma-image-processor.dir/build.make CMakeFiles/dma-image-processor.dir/src/cnpy.cpp.o
-.PHONY : src/cnpy.cpp.o
+src/config.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dma-image-processor.dir/build.make CMakeFiles/dma-image-processor.dir/src/config.cpp.o
+.PHONY : src/config.cpp.o
 
-src/cnpy.i: src/cnpy.cpp.i
+src/config.i: src/config.cpp.i
 
-.PHONY : src/cnpy.i
+.PHONY : src/config.i
 
 # target to preprocess a source file
-src/cnpy.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_processor.dir/build.make CMakeFiles/test_processor.dir/src/cnpy.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_dma_source.dir/build.make CMakeFiles/test_dma_source.dir/src/cnpy.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_archiver.dir/build.make CMakeFiles/test_archiver.dir/src/cnpy.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/dma-image-processor.dir/build.make CMakeFiles/dma-image-processor.dir/src/cnpy.cpp.i
-.PHONY : src/cnpy.cpp.i
+src/config.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dma-image-processor.dir/build.make CMakeFiles/dma-image-processor.dir/src/config.cpp.i
+.PHONY : src/config.cpp.i
 
-src/cnpy.s: src/cnpy.cpp.s
+src/config.s: src/config.cpp.s
 
-.PHONY : src/cnpy.s
+.PHONY : src/config.s
 
 # target to generate assembly for a file
-src/cnpy.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_processor.dir/build.make CMakeFiles/test_processor.dir/src/cnpy.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_dma_source.dir/build.make CMakeFiles/test_dma_source.dir/src/cnpy.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_archiver.dir/build.make CMakeFiles/test_archiver.dir/src/cnpy.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/dma-image-processor.dir/build.make CMakeFiles/dma-image-processor.dir/src/cnpy.cpp.s
-.PHONY : src/cnpy.cpp.s
+src/config.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dma-image-processor.dir/build.make CMakeFiles/dma-image-processor.dir/src/config.cpp.s
+.PHONY : src/config.cpp.s
 
 src/dma_source.o: src/dma_source.cpp.o
 
@@ -582,6 +613,7 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... test"
+	@echo "... cnpy"
 	@echo "... dma-image-processor"
 	@echo "... test_archiver"
 	@echo "... test_dma_source"
@@ -589,12 +621,15 @@ help:
 	@echo "... test_processor"
 	@echo "... test_slab_pool"
 	@echo "... test_spsc_ring"
+	@echo "... _deps/cnpy-src/cnpy.o"
+	@echo "... _deps/cnpy-src/cnpy.i"
+	@echo "... _deps/cnpy-src/cnpy.s"
 	@echo "... src/archiver.o"
 	@echo "... src/archiver.i"
 	@echo "... src/archiver.s"
-	@echo "... src/cnpy.o"
-	@echo "... src/cnpy.i"
-	@echo "... src/cnpy.s"
+	@echo "... src/config.o"
+	@echo "... src/config.i"
+	@echo "... src/config.s"
 	@echo "... src/dma_source.o"
 	@echo "... src/dma_source.i"
 	@echo "... src/dma_source.s"

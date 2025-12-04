@@ -25,9 +25,9 @@ include_directories(
 # Source files
 set(SOURCES
     src/archiver.cpp
+    src/config.cpp
     src/metrics.cpp
     src/driver.cpp
-    src/cnpy.cpp
     src/processor.cpp
     src/dma_source.cpp
 )
@@ -35,6 +35,46 @@ set(SOURCES
 # Find required libraries
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
+
+# Fetch dependencies as subprojects
+include(FetchContent)
+
+# Fetch cnpy
+FetchContent_Declare(
+    cnpy
+    GIT_REPOSITORY https://github.com/rogersce/cnpy.git
+    GIT_TAG master
+)
+
+FetchContent_GetProperties(cnpy)
+if(NOT cnpy_POPULATED)
+    FetchContent_Populate(cnpy)    
+    add_library(cnpy STATIC
+        ${cnpy_SOURCE_DIR}/cnpy.cpp
+    )
+    
+    target_include_directories(cnpy PUBLIC
+        ${cnpy_SOURCE_DIR}
+    )
+    
+    target_link_libraries(cnpy PUBLIC
+        ZLIB::ZLIB
+    )
+    
+    # Set C++ standard (cnpy's CMakeLists.txt uses C++11, but we're using C++20)
+    set_target_properties(cnpy PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED ON
+    )
+endif()
+
+# Fetch tomlplusplus (header-only library)
+FetchContent_Declare(
+    tomlplusplus
+    GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+    GIT_TAG        v3.4.0
+)
+FetchContent_MakeAvailable(tomlplusplus)
 
 # Find liburing (optional, for io_uring support)
 find_library(URING_LIBRARY
@@ -50,7 +90,8 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
     Threads::Threads
-    ZLIB::ZLIB
+    cnpy
+    tomlplusplus::tomlplusplus
 )
 
 # Link uring if available
@@ -86,11 +127,11 @@ if(TEST_SOURCES)
         # Determine which source files this test needs
         set(TEST_SOURCES_LIST ${TEST_SOURCE})
         if(TEST_NAME STREQUAL "test_dma_source")
-            list(APPEND TEST_SOURCES_LIST src/dma_source.cpp src/cnpy.cpp)
+            list(APPEND TEST_SOURCES_LIST src/dma_source.cpp)
         elseif(TEST_NAME STREQUAL "test_archiver")
-            list(APPEND TEST_SOURCES_LIST src/archiver.cpp src/cnpy.cpp)
+            list(APPEND TEST_SOURCES_LIST src/archiver.cpp)
         elseif(TEST_NAME STREQUAL "test_processor")
-            list(APPEND TEST_SOURCES_LIST src/processor.cpp src/cnpy.cpp)
+            list(APPEND TEST_SOURCES_LIST src/processor.cpp)
         elseif(TEST_NAME STREQUAL "test_poisson")
             # poisson.hpp is header-only, no source file needed
         endif()
@@ -100,7 +141,7 @@ if(TEST_SOURCES)
         target_link_libraries(${TEST_NAME}
             PRIVATE
             Threads::Threads
-            ZLIB::ZLIB
+            cnpy
         )
         # Add AVX2 flags for tests that use processor code
         if(TEST_NAME STREQUAL "test_processor")

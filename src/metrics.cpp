@@ -150,8 +150,8 @@ void PipelineMetrics::print(std::FILE* out) const {
   std::fprintf(out,
     "\n=== Component Stats ===\n"
     "DMA:    produced=%llu  archived_offered=%llu  pool_exhaust=%llu\n"
-    "PROC:   frames=%llu  stale_desc=%llu  empty_polls=%llu\n"
-    "ARCH:   frames=%llu  bytes=%llu  rotations=%llu  stale_desc=%llu  io_errors=%llu\n"
+    "PROC:   frames=%llu  stale_desc=%llu  empty_polls=%llu dropped_proc_queue=%llu\n"
+    "ARCH:   frames=%llu  bytes=%llu  rotations=%llu  stale_desc=%llu  io_errors=%llu dropped_arch_queue=%llu\n"
     "\n=== End-to-end Throughput ===\n"
     "Elapsed: %.3f s\n"
     "DMA:     %.1f fps\n"
@@ -163,11 +163,13 @@ void PipelineMetrics::print(std::FILE* out) const {
     (unsigned long long)s.proc_frames,
     (unsigned long long)s.proc_stale_desc,
     (unsigned long long)s.proc_empty_polls,
+    (unsigned long long)s.drops_proc_queue,
     (unsigned long long)s.arch_frames,
     (unsigned long long)s.arch_bytes,
     (unsigned long long)s.arch_rotations,
     (unsigned long long)s.arch_stale_desc,
     (unsigned long long)s.arch_io_errors,
+    (unsigned long long)s.drops_arch_queue,
     s.elapsed_sec,
     s.dma_fps,
     s.proc_fps,

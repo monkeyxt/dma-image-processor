@@ -57,6 +57,9 @@ cmake_install.cmake
 install_manifest.txt
 CTestTestfile.cmake
 
+# CMake FetchContent dependencies (if any appear at root level)
+_deps/
+
 # vscode files
 .vscode/
 
