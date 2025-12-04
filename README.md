@@ -14,7 +14,7 @@ cmake >= 3.15
 ```
 cmake .
 make
-./dma-image-processor <npy_dir> [run_seconds]
+./dma-image-processor <npy_dir> [run_seconds] [--config config.toml]
 ```
 
 ## Architecture
