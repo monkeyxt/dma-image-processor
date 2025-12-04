@@ -30,38 +30,42 @@ For `io_uring` to work, the following packages must be installed
 sudo apt-get update
 sudo apt-get install -y build-essential cmake liburing-dev
 ```
+## Scripts
+There a couple of useful scripts in the `utils` folder. 
+- `decode.py`: this python script decodes the output `.bin` files into `.npy` files. 
+- `image.py`: turns `.npy` into image files.
+- `npydiff.py`: diffs two `.npy` files.
 
 ## Architecture
 ```
-┌─────────────┐    ┌──────┐┌──────┐  ┌────┐  ┌────┐
-│dma:slab_pool│    │proc_q││arch_q│  │proc│  │arch│
-└──────┬──────┘    └──┬───┘└──┬───┘  └─┬──┘  └─┬──┘
-       │              │       │        │       │   
-       │ProcCallback()│       │        │       │   
-       │─────────────>│       │        │       │   
-       │              │       │        │       │   
-       │ paced @1kfps │       │        │       │   
-       │─────────────>│       │        │       │   
-       │              │       │        │       │   
-       │    ArchCallback()    │        │       │   
-       │─────────────────────>│        │       │   
-       │              │       │        │       │   
-       │    paced @200fps     │        │       │   
-       │─────────────────────>│        │       │   
-       │              │       │        │       │   
-       │              │PopFn proc_pop()│       │   
-       │              │───────────────>│       │   
-       │              │       │        │       │   
-       │              │       │PopFn arch_pop()│   
-       │              │       │───────────────>│   
-       │              │       │        │       │   
-       │        release_proc()│        │       │   
-       │<──────────────────────────────│       │   
-       │              │       │        │       │   
-       │            release_arch()     │       │   
-       │<──────────────────────────────────────│   
-┌──────┴──────┐    ┌──┴───┐┌──┴───┐  ┌─┴──┐  ┌─┴──┐
-│dma:slab_pool│    │proc_q││arch_q│  │proc│  │arch│
-└─────────────┘    └──────┘└──────┘  └────┘  └────┘
-
+ ┌──────────────┐     ┌─────────────────┐┌─────────────────┐┌─────────┐┌────────┐
+ │dma(slab_pool)│     │proc_q(spsc_ring)││arch_q(spsc_ring)││processor││archiver│
+ └──────┬───────┘     └────────┬────────┘└────────┬────────┘└────┬────┘└───┬────┘
+        │                      │                  │              │         │     
+        │    ProcCallback()    │                  │              │         │     
+        │─────────────────────>│                  │              │         │     
+        │                      │                  │              │         │     
+        │paced @1kfps (default)│                  │              │         │     
+        │─────────────────────>│                  │              │         │     
+        │                      │                  │              │         │     
+        │             ArchCallback()              │              │         │     
+        │────────────────────────────────────────>│              │         │     
+        │                      │                  │              │         │     
+        │         paced @200fps (default)         │              │         │     
+        │────────────────────────────────────────>│              │         │     
+        │                      │                  │              │         │     
+        │                      │      process -- proc_pop()      │         │     
+        │                      │────────────────────────────────>│         │     
+        │                      │                  │              │         │     
+        │                      │                  │  write -- arch_pop()   │     
+        │                      │                  │───────────────────────>│     
+        │                      │                  │              │         │     
+        │             release slab -- release_proc()             │         │     
+        │<───────────────────────────────────────────────────────│         │     
+        │                      │                  │              │         │     
+        │                  release slab -- release_arch()        │         │     
+        │<─────────────────────────────────────────────────────────────────│     
+ ┌──────┴───────┐     ┌────────┴────────┐┌────────┴────────┐┌────┴────┐┌───┴────┐
+ │dma(slab_pool)│     │proc_q(spsc_ring)││arch_q(spsc_ring)││processor││archiver│
+ └──────────────┘     └─────────────────┘└─────────────────┘└─────────┘└────────┘
 ```
