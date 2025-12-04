@@ -12,9 +12,11 @@ cmake >= 3.15
 
 ## Build & Run
 ```
-cmake .
+mkdir -p build
+cd build
+cmake ..
 make
-./dma-image-processor <npy_dir> [run_seconds] [--config config.toml]
+./bin/dma-image-processor <npy_dir> [run_seconds] [--config config.toml]
 ```
 
 For `io_uring` to work, the following packages must be installed
