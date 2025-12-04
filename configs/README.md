@@ -35,17 +35,17 @@ The configuration files for `DMA-Image-Processor` use TOML format and are divide
 | MAX_K          | int     | Max candidates to scan over                                    |
 
 The Poisson threshold is computed as the following. Consider two hypothesis event: $H_0$ : site empty, and $H_1$ : site occupied. For the two events, we have $N \sim \mathrm{Poisson}\left(\lambda_{\text 1}\right)$, and $N \sim \mathrm{Poisson}\left(\lambda_{\text 2}\right)$ where $\lambda_1$ is the `LAMBDA_EMPTY` and $\lambda_2$ is the `LAMBDA_OCC`. We have the following decision rule
-$$
+```math
 \delta_T(N)= \begin{cases}\text { occupied } & \text { if } N \geq T, \\ \text { empty } & \text { if } N<T .\end{cases}
-$$
+```
 We want to minimize the two sided error $P = P_{\text{FP}} + = P_{\text{FN}}$ where
-$$
+```math
 P_{\mathrm{FP}}(T)=\mathbb{P}\left(N \geq T \mid H_0\right)=\sum_{n=T}^{\infty} e^{-\lambda_{\text {1}}} \frac{\lambda_{\text {1}}^n}{n!} .
-$$
+```
 and 
-$$
+```math
 P_{\mathrm{FN}}(T)=\mathbb{P}\left(N<T \mid H_1\right)=\sum_{n=0}^{T-1} e^{-\lambda_{\mathrm{2}}} \frac{\lambda_{\mathrm{2}}^n}{n!}.
-$$
+```
 The threshold can be precomputed before the pipeline starts.
 
 
