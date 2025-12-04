@@ -112,7 +112,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 # Option to build tests (default: OFF)
-option(BUILD_TESTS "Build test executables" OFF)
+option(BUILD_TESTS "Build test executables" ON)
 
 # Add tests if needed
 if(BUILD_TESTS)

@@ -19,9 +19,9 @@ make
 ./bin/dma-image-processor <npy_dir> [run_seconds] [--config config.toml]
 ```
 
-To build with tests:
+To build without tests:
 ```
-cmake .. -DBUILD_TESTS=ON
+cmake .. -DBUILD_TESTS=OFF
 make
 ```
 
