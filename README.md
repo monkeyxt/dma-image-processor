@@ -19,6 +19,12 @@ make
 ./bin/dma-image-processor <npy_dir> [run_seconds] [--config config.toml]
 ```
 
+To build with tests:
+```
+cmake .. -DBUILD_TESTS=ON
+make
+```
+
 For `io_uring` to work, the following packages must be installed
 ```
 sudo apt-get update

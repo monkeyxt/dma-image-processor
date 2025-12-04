@@ -46,6 +46,7 @@ FetchContent_Declare(
     GIT_TAG master
 )
 
+# Import cnpy
 FetchContent_GetProperties(cnpy)
 if(NOT cnpy_POPULATED)
     FetchContent_Populate(cnpy)    
@@ -60,8 +61,7 @@ if(NOT cnpy_POPULATED)
     target_link_libraries(cnpy PUBLIC
         ZLIB::ZLIB
     )
-    
-    # Set C++ standard (cnpy's CMakeLists.txt uses C++11, but we're using C++20)
+
     set_target_properties(cnpy PROPERTIES
         CXX_STANDARD 20
         CXX_STANDARD_REQUIRED ON
@@ -111,16 +111,20 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     )
 endif()
 
-# Optional: Add tests if needed
-enable_testing()
+# Option to build tests (default: OFF)
+option(BUILD_TESTS "Build test executables" OFF)
 
-# Optional: Add test executables
-file(GLOB TEST_SOURCES
-    tests/*.cpp
-    tests/*/*.cpp
-)
+# Add tests if needed
+if(BUILD_TESTS)
+    enable_testing()
 
-if(TEST_SOURCES)
+    # Add test executables
+    file(GLOB TEST_SOURCES
+        tests/*.cpp
+        tests/*/*.cpp
+    )
+
+    if(TEST_SOURCES)
     foreach(TEST_SOURCE ${TEST_SOURCES})
         get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
         
@@ -156,5 +160,6 @@ if(TEST_SOURCES)
         endif()
         add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
     endforeach()
-endif()
+    endif()
+endif() # BUILD_TESTS
 
