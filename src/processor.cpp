@@ -28,9 +28,11 @@ namespace pipeline {
 // The code are written in a way such that only 8-byte aligned memory is 
 // accessed to avoid potential performance issues.
 // ============================================================================
-static inline uint64_t sum_roi_scalar(const uint16_t* img,
+// Mark as maybe_unused to suppress unused warnings.
+[[maybe_unused]] static inline uint64_t sum_roi_scalar(const uint16_t* img,
                                       int img_w,
-                                      int x, int y, int w, int h) {
+                                      int x, int y, int w, int h) 
+{
   uint64_t sum = 0;
   const uint16_t* row = img + y * img_w + x;
   for (int r = 0; r < h; ++r) {
