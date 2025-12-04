@@ -17,6 +17,12 @@ make
 ./dma-image-processor <npy_dir> [run_seconds] [--config config.toml]
 ```
 
+For `io_uring` to work, the following packages must be installed
+```
+sudo apt-get update
+sudo apt-get install -y build-essential cmake liburing-dev
+```
+
 ## Architecture
 ```
 ┌─────────────┐    ┌──────┐┌──────┐  ┌────┐  ┌────┐
